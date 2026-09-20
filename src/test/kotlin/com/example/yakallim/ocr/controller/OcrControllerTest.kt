@@ -1,5 +1,6 @@
 package com.example.yakallim.ocr.controller
 
+import com.example.yakallim.ocr.dto.N8nCallbackRequest
 import com.example.yakallim.ocr.dto.OcrJobResponse
 import com.example.yakallim.ocr.model.JobStatus
 import com.example.yakallim.ocr.repository.OcrJobRepository
@@ -75,6 +76,31 @@ class OcrControllerTest {
 
         val job = objectMapper.readValue(submitResult.response.contentAsString, OcrJobResponse::class.java)
         Assertions.assertNotNull(job.jobId)
+    }
+
+    @Test
+    @DisplayName("n8n 콜백 JSON에 rawName/autoCorrected/confidence가 없으면 null로 역직렬화된다")
+    fun shouldDeserializeN8nCallbackWithMissingNewFieldsAsNull() {
+        // 참고: bounds는 Jackson이 이 프로젝트에서 Kotlin 기본값을 적용하지 않아
+        // JSON에 명시하지 않으면 별도로 NPE가 발생한다(X2와 무관한 기존 이슈, 여기서는 우회).
+        val json = """
+            {
+              "jobId": "job-1",
+              "status": "COMPLETED",
+              "data": {
+                "medicines": [
+                  { "medicineName": "타이레놀정", "dosagePerTake": "1정", "dailyFrequency": 3, "durationDays": 3, "bounds": [] }
+                ]
+              }
+            }
+        """.trimIndent()
+
+        val request = objectMapper.readValue(json, N8nCallbackRequest::class.java)
+        val medicine = request.data.medicines.single()
+
+        Assertions.assertNull(medicine.rawName)
+        Assertions.assertNull(medicine.autoCorrected)
+        Assertions.assertNull(medicine.confidence)
     }
 
     @Test
