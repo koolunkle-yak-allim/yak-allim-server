@@ -23,11 +23,8 @@
 - **Language**: Kotlin 2.0.21 (Coroutines)
 - **Database**: H2 Database (In-Memory), Spring Data JPA
 - **Libraries**:
-   - ONNX Runtime 1.18.0
-   - Firebase Admin SDK 9.2.0
-   - Guava 33.3.0-jre
-   - Protobuf 3.25.5
-   - gRPC 1.75.0
+  - ONNX Runtime 1.18.0
+  - Firebase Admin SDK 9.2.0
 - **Build**: Gradle (Kotlin DSL)
 
 ---
@@ -42,6 +39,7 @@
 - **Infrastructure Layer**: 외부 라이브러리(ONNX, Firebase) 설정, HTTP Client(n8n) 및 데이터베이스 접근 구현체
 
 ### Package Structure
+
 ```text
 com.example.yakallim
 ├── global                 # 공통 전역 처리
@@ -67,18 +65,22 @@ com.example.yakallim
 ## Getting Started
 
 ### Prerequisites
+
 - **JDK**: Java 17
 - **Database**: H2 (In-memory 실행)
 - **External Keys**: Firebase Admin SDK 비공개 키 JSON 파일 (`yak-allim-firebase-key.json`)
 
 ### Configuration
+
 1. Firebase Console에서 발급받은 서비스 계정 키 파일의 이름을 `yak-allim-firebase-key.json`으로 변경하여 백엔드 프로젝트 루트 디렉터리에 배치합니다.
 2. `src/main/resources/application.properties` 파일에서 사용할 OCR 엔진 타입을 지정합니다:
+
    ```properties
    # OCR 엔진 타입 선택: local (로컬 ONNX 엔진) 또는 n8n (n8n Webhook 연동)
    ocr.type=n8n
    ocr.n8n.webhook-url=http://localhost:5678/webhook-test/ocr
    ```
+
 3. `ocr.type=local` 모드를 사용할 경우 `src/main/resources/models/` 경로에 아래 모델 파일과 사전이 존재하는지 확인합니다.
    - `ch_PP-OCRv4_det_infer.onnx` (텍스트 영역 검출 모델)
    - `korean_PP-OCRv4_rec_infer.onnx` (텍스트 인식 모델)
@@ -87,13 +89,17 @@ com.example.yakallim
    - `medicines.csv`
 
 ### Installation & Build
+
 1. 저장소를 복제합니다:
+
    ```bash
-   git clone https://github.com/your-username/yak-allim-server.git
+   git clone https://github.com/koolunkle-yak-allim/yak-allim-server.git
    ```
+
 2. 백엔드 프로젝트 루트에 `yak-allim-firebase-key.json` 파일을 추가합니다.
 3. `ocr.type=local` 환경일 경우 `src/main/resources/models/` 디렉터리에 ONNX 모델 및 사전 파일(`ch_PP-OCRv4_det_infer.onnx`, `korean_PP-OCRv4_rec_infer.onnx`, `korean_dict.txt`)을 추가합니다.
 4. 프로젝트를 빌드하고 실행합니다:
+
    ```bash
    ./gradlew bootRun
    ```

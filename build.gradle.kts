@@ -48,6 +48,7 @@ dependencies {
 
     kapt("org.springframework.boot:spring-boot-configuration-processor")
 
+    // Firebase Admin SDK 등이 전이적으로 끌어오는 Guava/Protobuf/gRPC 버전 충돌 방지를 위한 버전 고정
     constraints {
         implementation("com.google.guava:guava:$guavaVersion")
         implementation("com.google.protobuf:protobuf-java:$protobufVersion")
