@@ -22,4 +22,7 @@ sealed class OcrException(
 
     class InvalidFileExtensionException(message: String = "허용되지 않는 파일 확장자입니다.") :
         OcrException(HttpStatus.BAD_REQUEST, message)
+
+    class EngineNotReadyException(message: String = "OCR 엔진이 준비되지 않았습니다.") :
+        OcrException(HttpStatus.SERVICE_UNAVAILABLE, message)
 }

@@ -3,6 +3,7 @@ package com.example.yakallim.ocr.service
 import com.example.yakallim.notification.service.PushNotificationClient
 import com.example.yakallim.ocr.dto.OcrResponse
 import com.example.yakallim.ocr.engine.OcrEngine
+import com.example.yakallim.ocr.exception.JobCancelledException
 import com.example.yakallim.ocr.exception.OcrErrorMessageResolver
 import com.example.yakallim.ocr.model.PipelineStep
 import com.example.yakallim.ocr.parser.PrescriptionParser
@@ -62,13 +63,13 @@ class OcrJobProcessor(
         val stopwatch = StopWatch(jobId)
 
         try {
-            check(!ocrJobRepository.isCancelled(jobId)) { "ONNX 추론 전 취소됨" }
+            ensureNotCancelled(jobId, "ONNX 추론")
 
             stopwatch.start("ONNX 추론")
             val textBlocks = Files.newInputStream(path).use { ocrEngine.runOcr(it, jobId) }
             stopwatch.stop()
 
-            check(!ocrJobRepository.isCancelled(jobId)) { "구조화 파싱 전 취소됨" }
+            ensureNotCancelled(jobId, "구조화 파싱")
 
             ocrProgressManager.publishProgress(jobId, PipelineStep.PARSING)
 
@@ -96,7 +97,7 @@ class OcrJobProcessor(
                 )
             }
 
-            check(!ocrJobRepository.isCancelled(jobId)) { "알림 전송 전 취소됨" }
+            ensureNotCancelled(jobId, "알림 전송")
 
             notifier.notify(
                 token = token ?: "",
@@ -104,7 +105,7 @@ class OcrJobProcessor(
                 body = response.message,
                 data = mapOf("jobId" to jobId, "status" to "COMPLETED", "message" to response.message)
             )
-        } catch (e: IllegalStateException) {
+        } catch (e: JobCancelledException) {
             log.info("OCR job cancelled: jobId='{}', reason='{}'", jobId, e.message)
             ocrProgressManager.publishProgress(jobId, PipelineStep.FAILED, "작업이 취소되었습니다.")
         } catch (e: Exception) {
@@ -124,6 +125,12 @@ class OcrJobProcessor(
                     "message" to userFacingMessage
                 )
             )
+        }
+    }
+
+    private fun ensureNotCancelled(jobId: String, stage: String) {
+        if (ocrJobRepository.isCancelled(jobId)) {
+            throw JobCancelledException("$stage 전 취소됨")
         }
     }
 }
