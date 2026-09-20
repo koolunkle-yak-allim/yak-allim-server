@@ -3,10 +3,16 @@ package com.example.yakallim.ocr.controller
 import com.example.yakallim.ocr.config.OcrProperties
 import com.example.yakallim.ocr.dto.N8nCallbackRequest
 import com.example.yakallim.ocr.dto.OcrJobResponse
+import com.example.yakallim.ocr.dto.OcrProgressResponse
 import com.example.yakallim.ocr.exception.OcrException
 import com.example.yakallim.ocr.service.N8nOcrService
 import com.example.yakallim.ocr.service.OcrProgressManager
 import com.example.yakallim.ocr.service.OcrService
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.media.Content
+import io.swagger.v3.oas.annotations.media.Schema
+import io.swagger.v3.oas.annotations.responses.ApiResponse
+import io.swagger.v3.oas.annotations.responses.ApiResponses
 import jakarta.servlet.http.HttpServletResponse
 import jakarta.validation.Valid
 import org.slf4j.LoggerFactory
@@ -44,6 +50,17 @@ class OcrController(
         return ResponseEntity.ok(job)
     }
 
+    @Operation(
+        summary = "OCR 작업 진행률 구독 (SSE)",
+        description = "`connect`, `progress` 이벤트를 전송하는 Server-Sent Events 스트림입니다. " +
+            "`progress` 이벤트의 payload는 OcrProgressResponse 스키마를 따릅니다."
+    )
+    @ApiResponses(
+        ApiResponse(
+            responseCode = "200",
+            content = [Content(mediaType = MediaType.TEXT_EVENT_STREAM_VALUE, schema = Schema(implementation = OcrProgressResponse::class))]
+        )
+    )
     @GetMapping("/jobs/{jobId}/progress", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
     fun getJobProgress(
         @PathVariable jobId: String,
