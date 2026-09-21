@@ -40,6 +40,22 @@ class N8nOcrService(
         }
     }
 
+    /** PROCESSING 타임아웃으로 강제 종료될 때 호출된다. 남아있는 FCM 토큰을 정리하고, 있으면 실패 알림을 보낸다. */
+    fun handleTimeout(jobId: String, userFacingMessage: String) {
+        val token = fcmTokenMap.remove(jobId) ?: return
+        notifier.notify(
+            token = token,
+            title = "복약 안내서 분석 실패",
+            body = userFacingMessage,
+            data = mapOf(
+                "jobId" to jobId,
+                "status" to "FAILED",
+                "errorCode" to "OCR_PROCESSING_TIMEOUT",
+                "message" to userFacingMessage
+            )
+        )
+    }
+
     fun handleCallback(jobId: String, medicines: List<PrescribedMedicine>) {
         val response = OcrResponse(
             fileName = "n8n_ocr_$jobId",

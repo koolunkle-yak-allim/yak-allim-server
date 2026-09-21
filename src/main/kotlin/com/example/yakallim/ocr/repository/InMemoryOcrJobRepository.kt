@@ -4,17 +4,24 @@ import com.example.yakallim.ocr.dto.OcrJobResponse
 import com.example.yakallim.ocr.dto.OcrResponse
 import com.example.yakallim.ocr.model.JobStatus
 import org.springframework.stereotype.Repository
+import java.time.Clock
+import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 
 @Repository
-class InMemoryOcrJobRepository : OcrJobRepository {
+class InMemoryOcrJobRepository(
+    private val clock: Clock
+) : OcrJobRepository {
 
-    private val jobRegistry = ConcurrentHashMap<String, OcrJobResponse>()
+    private data class JobRecord(val response: OcrJobResponse, val updatedAt: Instant)
 
-    override fun registerJob(jobId: String): OcrJobResponse =
-        OcrJobResponse(jobId = jobId, status = JobStatus.ACCEPTED).also {
-            jobRegistry[jobId] = it
-        }
+    private val jobRegistry = ConcurrentHashMap<String, JobRecord>()
+
+    override fun registerJob(jobId: String): OcrJobResponse {
+        val response = OcrJobResponse(jobId = jobId, status = JobStatus.ACCEPTED)
+        jobRegistry[jobId] = JobRecord(response, clock.instant())
+        return response
+    }
 
     override fun updateToProcessing(jobId: String) {
         updateJobStatus(jobId, JobStatus.PROCESSING)
@@ -23,9 +30,9 @@ class InMemoryOcrJobRepository : OcrJobRepository {
     override fun updateToCompleted(jobId: String, result: OcrResponse): Boolean {
         var transitionApplied = false
         jobRegistry.computeIfPresent(jobId) { _, existing ->
-            if (existing.status == JobStatus.ACCEPTED || existing.status == JobStatus.PROCESSING) {
+            if (existing.response.status == JobStatus.ACCEPTED || existing.response.status == JobStatus.PROCESSING) {
                 transitionApplied = true
-                existing.copy(status = JobStatus.COMPLETED, result = result)
+                JobRecord(existing.response.copy(status = JobStatus.COMPLETED, result = result), clock.instant())
             } else {
                 transitionApplied = false
                 existing
@@ -42,25 +49,34 @@ class InMemoryOcrJobRepository : OcrJobRepository {
         updateJobStatus(jobId, JobStatus.CANCELLED)
     }
 
-    override fun getJob(jobId: String): OcrJobResponse? = jobRegistry[jobId]
+    override fun getJob(jobId: String): OcrJobResponse? = jobRegistry[jobId]?.response
 
-    override fun isCancelled(jobId: String): Boolean = jobRegistry[jobId]?.status == JobStatus.CANCELLED
+    override fun isCancelled(jobId: String): Boolean = jobRegistry[jobId]?.response?.status == JobStatus.CANCELLED
+
+    /** 지정한 상태들 중 하나이면서 마지막 갱신 시각이 [cutoff]보다 오래된 작업의 ID 목록. */
+    fun findJobIdsInStatusUpdatedBefore(statuses: Set<JobStatus>, cutoff: Instant): List<String> =
+        jobRegistry.entries
+            .filter { (_, record) -> record.response.status in statuses && record.updatedAt.isBefore(cutoff) }
+            .map { (jobId, _) -> jobId }
+
+    fun deleteJob(jobId: String) {
+        jobRegistry.remove(jobId)
+    }
 
     private fun updateJobStatus(
         jobId: String, status: JobStatus, result: OcrResponse? = null, error: String? = null
     ): Boolean {
         var transitionApplied = false
         jobRegistry.compute(jobId) { _, existing ->
-            if (existing?.status == JobStatus.CANCELLED && status != JobStatus.CANCELLED) {
+            if (existing?.response?.status == JobStatus.CANCELLED && status != JobStatus.CANCELLED) {
                 transitionApplied = false
                 return@compute existing
             }
             transitionApplied = true
-            existing?.copy(
-                status = status, result = result ?: existing.result, error = error
-            ) ?: OcrJobResponse(
-                jobId = jobId, status = status, result = result, error = error
-            )
+            val updatedResponse = existing?.response?.copy(
+                status = status, result = result ?: existing.response.result, error = error
+            ) ?: OcrJobResponse(jobId = jobId, status = status, result = result, error = error)
+            JobRecord(updatedResponse, clock.instant())
         }
         return transitionApplied
     }

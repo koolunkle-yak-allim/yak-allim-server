@@ -3,6 +3,7 @@ package com.example.yakallim.ocr.service
 import com.example.yakallim.notification.service.PushNotificationClient
 import com.example.yakallim.ocr.dto.OcrResponse
 import com.example.yakallim.ocr.engine.OcrEngine
+import com.example.yakallim.ocr.exception.JobCancelledException
 import com.example.yakallim.ocr.exception.OcrErrorMessageResolver
 import com.example.yakallim.ocr.model.PipelineStep
 import com.example.yakallim.ocr.parser.PrescriptionParser
@@ -16,6 +17,7 @@ import org.springframework.util.StopWatch
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import javax.imageio.ImageIO
 
 @Component
 class OcrJobProcessor(
@@ -42,38 +44,33 @@ class OcrJobProcessor(
             throw SecurityException("Access denied: Invalid file path.")
         }
 
-        delay?.takeIf { it > 0 }?.let {
-            try {
-                Thread.sleep(it)
-            } catch (_: InterruptedException) {
-                Thread.currentThread().interrupt()
-            }
-        }
-
-        if (ocrJobRepository.isCancelled(jobId)) {
-            log.info("OCR job cancelled before processing: jobId='{}'", jobId)
-            ocrProgressManager.publishProgress(jobId, PipelineStep.FAILED, "작업이 취소되었습니다.")
-            return
-        }
-
-        ocrJobRepository.updateToProcessing(jobId)
-        ocrProgressManager.publishProgress(jobId, PipelineStep.IMAGE_PROCESSING)
-
-        val stopwatch = StopWatch(jobId)
-
         try {
-            check(!ocrJobRepository.isCancelled(jobId)) { "ONNX 추론 전 취소됨" }
+            delay?.takeIf { it > 0 }?.let {
+                try {
+                    Thread.sleep(it)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                }
+            }
+
+            ensureNotCancelled(jobId, "ONNX 추론")
+
+            ocrJobRepository.updateToProcessing(jobId)
+            ocrProgressManager.publishProgress(jobId, PipelineStep.IMAGE_PROCESSING)
+
+            val stopwatch = StopWatch(jobId)
 
             stopwatch.start("ONNX 추론")
             val textBlocks = Files.newInputStream(path).use { ocrEngine.runOcr(it, jobId) }
+            val imageWidth = readImageWidth(path)
             stopwatch.stop()
 
-            check(!ocrJobRepository.isCancelled(jobId)) { "구조화 파싱 전 취소됨" }
+            ensureNotCancelled(jobId, "구조화 파싱")
 
             ocrProgressManager.publishProgress(jobId, PipelineStep.PARSING)
 
             stopwatch.start("구조화 파싱")
-            val medicines = prescriptionParser.parse(textBlocks)
+            val medicines = prescriptionParser.parse(textBlocks, imageWidth)
             stopwatch.stop()
 
             log.info("\n${stopwatch.prettyPrint()}")
@@ -96,7 +93,7 @@ class OcrJobProcessor(
                 )
             }
 
-            check(!ocrJobRepository.isCancelled(jobId)) { "알림 전송 전 취소됨" }
+            ensureNotCancelled(jobId, "알림 전송")
 
             notifier.notify(
                 token = token ?: "",
@@ -104,7 +101,7 @@ class OcrJobProcessor(
                 body = response.message,
                 data = mapOf("jobId" to jobId, "status" to "COMPLETED", "message" to response.message)
             )
-        } catch (e: IllegalStateException) {
+        } catch (e: JobCancelledException) {
             log.info("OCR job cancelled: jobId='{}', reason='{}'", jobId, e.message)
             ocrProgressManager.publishProgress(jobId, PipelineStep.FAILED, "작업이 취소되었습니다.")
         } catch (e: Exception) {
@@ -124,6 +121,25 @@ class OcrJobProcessor(
                     "message" to userFacingMessage
                 )
             )
+        } finally {
+            runCatching { Files.deleteIfExists(normalizedPath) }
+                .onFailure { log.warn("Failed to delete uploaded prescription image: {}", normalizedPath, it) }
+        }
+    }
+
+    private fun ensureNotCancelled(jobId: String, stage: String) {
+        if (ocrJobRepository.isCancelled(jobId)) {
+            throw JobCancelledException("$stage 전 취소됨")
+        }
+    }
+
+    /** 좌표 정규화(S6)에 쓸 원본 이미지 가로 픽셀 크기. 읽기에 실패하면 0을 반환해 파서가 기본값으로 대체하도록 한다. */
+    private fun readImageWidth(path: Path): Int {
+        return runCatching {
+            Files.newInputStream(path).use { ImageIO.read(it)?.width ?: 0 }
+        }.getOrElse { e ->
+            log.warn("Failed to read image dimensions for coordinate normalization: {}", path, e)
+            0
         }
     }
 }

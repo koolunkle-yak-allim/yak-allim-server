@@ -21,11 +21,11 @@ data class OcrProperties(
     }
 
     data class Parser(
-        val yOffset: Int,
-        val yDeviationThreshold: Int,
-        val columnSeparatorX: Int,
-        val medicineMinX: Int,
-        val medicineMaxX: Int
+        val yOffsetRatio: Double,
+        val yDeviationThresholdRatio: Double,
+        val columnSeparatorXRatio: Double,
+        val medicineMinXRatio: Double,
+        val medicineMaxXRatio: Double
     )
 
     data class N8n(
