@@ -98,7 +98,14 @@ class PrescriptionParser(
             )
 
             PrescribedMedicine(
-                standardName, dosing.dosagePerTake, dosing.dailyFrequency, dosing.durationDays, bounds
+                medicineName = standardName,
+                dosagePerTake = dosing.dosagePerTake,
+                dailyFrequency = dosing.dailyFrequency,
+                durationDays = dosing.durationDays,
+                rawName = extractedName,
+                autoCorrected = standardName != extractedName,
+                confidence = matchedName?.confidence ?: 0f,
+                bounds = bounds
             )
         }
     }

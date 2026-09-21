@@ -37,6 +37,14 @@ object HangulUtils {
         }
     }
 
+    fun isSubsequence(query: String, target: String): Boolean {
+        var i = 0
+        for (ch in target) {
+            if (i < query.length && query[i] == ch) i++
+        }
+        return i == query.length
+    }
+
     fun levenshteinDistanceTo(text: String, target: String): Int {
         if (text == target) return 0
         if (text.isEmpty()) return target.length
