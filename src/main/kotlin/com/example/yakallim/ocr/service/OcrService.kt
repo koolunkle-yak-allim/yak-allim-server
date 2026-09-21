@@ -6,6 +6,7 @@ import com.example.yakallim.ocr.model.PipelineStep
 import com.example.yakallim.ocr.repository.OcrJobRepository
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import org.springframework.core.task.TaskRejectedException
 import org.springframework.web.multipart.MultipartFile
 import java.io.IOException
 import java.nio.file.Files
@@ -68,7 +69,17 @@ abstract class OcrService(
 
         ocrProgressManager.publishProgress(jobId, PipelineStep.ACCEPTED)
 
-        processJob(jobId, targetPath, uniqueFileName, fcmToken, delay)
+        try {
+            processJob(jobId, targetPath, uniqueFileName, fcmToken, delay)
+        } catch (e: TaskRejectedException) {
+            runCatching { Files.deleteIfExists(targetPath) }
+                .onFailure { log.warn("Failed to delete uploaded image after task rejection: {}", targetPath, it) }
+            val rejectionMessage = "서버가 바빠 요청을 처리할 수 없습니다. 잠시 후 다시 시도해 주세요."
+            ocrJobRepository.updateToFailed(jobId, rejectionMessage)
+            ocrProgressManager.publishProgress(jobId, PipelineStep.FAILED, rejectionMessage)
+            log.warn("OCR task rejected by executor (queue full): jobId='{}'", jobId, e)
+            throw OcrException.ServiceBusyException(rejectionMessage)
+        }
 
         return job
     }

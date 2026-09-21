@@ -28,4 +28,7 @@ sealed class OcrException(
 
     class UnauthorizedWebhookException(message: String = "유효하지 않은 webhook 요청입니다.") :
         OcrException(HttpStatus.UNAUTHORIZED, message)
+
+    class ServiceBusyException(message: String = "서버가 바빠 요청을 처리할 수 없습니다. 잠시 후 다시 시도해 주세요.") :
+        OcrException(HttpStatus.SERVICE_UNAVAILABLE, message)
 }
