@@ -34,7 +34,7 @@ class FcmPushNotificationClient(
         }.onSuccess {
             log.info("FCM notification sent successfully: [title] {}", title)
         }.onFailure { e ->
-            log.error("Failed to send FCM notification: [title] {}, [token] {}", title, token, e)
+            log.error("Failed to send FCM notification: [title] {}, [token] {}...", title, token.take(6), e)
         }
     }
 }

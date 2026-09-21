@@ -81,6 +81,10 @@ com.example.yakallim
    ocr.n8n.webhook-url=http://localhost:5678/webhook-test/ocr
    ```
 
+   `ocr.type=n8n`일 때는 `OCR_N8N_WEBHOOK_SECRET` 환경 변수가 반드시 필요합니다(비어 있으면 기동에 실패합니다).
+   이 값은 서버 → n8n 요청에는 `X-N8N-WEBHOOK-SECRET` 헤더로, n8n → 서버 콜백에는 `X-N8N-Secret` 헤더로
+   전달됩니다(양방향 헤더 이름이 다르니 n8n 워크플로우 설정 시 유의하세요).
+
 3. `ocr.type=local` 모드를 사용할 경우 `src/main/resources/models/` 경로에 아래 모델 파일과 사전이 존재하는지 확인합니다. `*.onnx` 파일은 용량 문제로 `.gitignore`에 포함되어 있어 저장소에 없으므로, [PaddleOCR PP-OCRv4](https://github.com/PaddlePaddle/PaddleOCR) 등에서 별도로 받아 ONNX로 변환하거나 보유한 모델 파일을 직접 배치해야 합니다.
    - `ch_PP-OCRv4_det_infer.onnx` (텍스트 영역 검출 모델)
    - `korean_PP-OCRv4_rec_infer.onnx` (텍스트 인식 모델)
