@@ -1,11 +1,7 @@
 package com.example.yakallim.ocr.service
 
-import com.example.yakallim.notification.service.PushNotificationClient
-import com.example.yakallim.ocr.dto.OcrJobResponse
-import com.example.yakallim.ocr.dto.OcrResponse
 import com.example.yakallim.ocr.engine.OcrEngine
 import com.example.yakallim.ocr.parser.PrescriptionParser
-import com.example.yakallim.ocr.repository.OcrJobRepository
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -77,20 +73,4 @@ class OcrJobProcessorTest {
 
         assertFalse(Files.exists(uploadedFile), "취소 처리 후에도 업로드 파일이 남아있습니다.")
     }
-}
-
-private class FakeOcrJobRepository : OcrJobRepository {
-    var cancelled = false
-
-    override fun registerJob(jobId: String): OcrJobResponse = throw NotImplementedError()
-    override fun updateToProcessing(jobId: String) {}
-    override fun updateToCompleted(jobId: String, result: OcrResponse): Boolean = true
-    override fun updateToFailed(jobId: String, errorMessage: String) {}
-    override fun updateToCancelled(jobId: String) {}
-    override fun getJob(jobId: String): OcrJobResponse? = null
-    override fun isCancelled(jobId: String): Boolean = cancelled
-}
-
-private class NoOpPushNotificationClient : PushNotificationClient {
-    override fun notify(token: String, title: String, body: String, data: Map<String, String>) {}
 }
