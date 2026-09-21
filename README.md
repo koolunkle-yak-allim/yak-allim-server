@@ -25,40 +25,48 @@
 - **Libraries**:
   - ONNX Runtime 1.18.0
   - Firebase Admin SDK 9.2.0
+  - Ktor Client (n8n Webhook 비동기 HTTP 통신)
+  - SpringDoc OpenAPI(Swagger UI)
+- **Testing**: JUnit 5, Mockito-Kotlin
 - **Build**: Gradle (Kotlin DSL)
 
 ---
 
 ## Project Structure
 
-본 프로젝트는 도메인과 관심사를 기준으로 레이어를 분리하여 설계되었습니다.
-
-- **Presentation Layer**: 클라이언트의 REST API 요청을 수신하고 응답을 반환하는 컨트롤러 및 DTO
-- **Application Layer**: 비동기 백그라운드 작업 실행 및 비즈니스 서비스 제어
-- **Domain Layer**: 비즈니스 규칙, 도메인 모델, 공통 인터페이스 및 예외 정의
-- **Infrastructure Layer**: 외부 라이브러리(ONNX, Firebase) 설정, HTTP Client(n8n) 및 데이터베이스 접근 구현체
+패키지를 레이어가 아닌 **기능(도메인) 단위**로 우선 분리하고(`medicine`/`notification`/`ocr`), 각 기능 패키지 내부는 Spring의 통상적인 계층(`controller`/`service`/`repository`/`config` 등)으로 나눴습니다.
 
 ### Package Structure
 
 ```text
 com.example.yakallim
 ├── global                 # 공통 전역 처리
-│   ├── config             # Swagger / OpenApi 설정
-│   ├── exception          # 전역 예외 처리 및 공통 ErrorResponse
-│   └── utils              # 한글 자모 분해 및 유틸리티
-├── medicine               # 의약품 사전 데이터 관리
-│   ├── application        # 의약품명 정규화 서비스
-│   ├── domain             # 의약품 도메인 모델 및 Repository 인터페이스
-│   └── infrastructure     # CSV 데이터 초기화 및 데이터베이스 구현
-├── notification           # 알림 발송 서비스
-│   ├── domain             # NotificationClient 인터페이스
-│   └── infrastructure     # Firebase FCM 구현 및 설정
-└── ocr                    # OCR 추론 및 분석
-    ├── application        # 비동기 작업 스케줄링 및 템플릿 서비스
-    ├── domain             # OCR 엔진 인터페이스 및 도메인 모델
-    ├── infrastructure     # ONNX 엔진, n8n Webhook Client, 파서 구현
-    └── presentation       # REST API 컨트롤러 및 DTO
+│   ├── config             # Swagger / OpenApi, CORS 등 전역 설정
+│   ├── exception          # 전역 예외 처리(@RestControllerAdvice) 및 공통 ErrorResponse
+│   └── utils              # 한글 자모 분해 등 유틸리티
+├── medicine                # 의약품 사전 데이터 관리
+│   ├── config              # 매칭 규칙 관련 설정 프로퍼티
+│   ├── initializer         # CSV 사전 데이터 초기 적재
+│   ├── model                # 의약품 도메인 모델
+│   ├── repository          # 의약품 Repository
+│   └── service              # 약품명 정규화(오타 교정) 서비스
+├── notification            # 알림 발송
+│   ├── config              # FCM 설정
+│   ├── infrastructure      # Firebase FCM 구현체
+│   └── service              # NotificationClient 인터페이스
+└── ocr                     # OCR 추론 및 분석 (핵심 도메인)
+    ├── config              # OCR/파서/비동기 실행기 설정 프로퍼티
+    ├── controller          # REST API 컨트롤러
+    ├── dto                 # 요청/응답 DTO
+    ├── engine              # ONNX 로컬 추론 엔진, n8n Webhook Client
+    ├── exception           # OCR 도메인 전용 예외
+    ├── model               # OCR 도메인 모델(PipelineStep, PrescribedMedicine 등)
+    ├── parser              # OCR 결과를 복용 정보로 구조화하는 파서
+    ├── repository          # 작업 상태 저장소(InMemoryOcrJobRepository)
+    └── service             # 비동기 작업 처리, 진행률 SSE, 정리 스케줄러
 ```
+
+API 엔드포인트·SSE 이벤트·FCM 페이로드 등 서버-클라이언트 계약은 [`docs/api-contract.md`](docs/api-contract.md)에 별도로 정리되어 있습니다.
 
 ---
 
