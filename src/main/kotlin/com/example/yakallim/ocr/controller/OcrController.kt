@@ -23,6 +23,7 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.multipart.MultipartFile
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
+import java.security.MessageDigest
 
 @RestController
 @RequestMapping("/api/v1/ocr")
@@ -85,10 +86,14 @@ class OcrController(
     ): ResponseEntity<Unit> {
         // Validate webhook secret
         val configuredSecret = ocrProperties.n8n.webhookSecret.trim()
-        val receivedSecret = webhookSecret?.trim()
-        if (configuredSecret.isNotBlank() && receivedSecret != configuredSecret) {
+        val receivedSecret = webhookSecret?.trim() ?: ""
+        val isSecretValid = MessageDigest.isEqual(
+            configuredSecret.toByteArray(),
+            receivedSecret.toByteArray()
+        )
+        if (configuredSecret.isNotBlank() && !isSecretValid) {
             log.warn("Webhook secret verification failed: unauthorized request")
-            throw OcrException.IllegalJobStateException("유효하지 않은 webhook 요청입니다.")
+            throw OcrException.UnauthorizedWebhookException()
         }
 
         // Validate jobId matches between path and body

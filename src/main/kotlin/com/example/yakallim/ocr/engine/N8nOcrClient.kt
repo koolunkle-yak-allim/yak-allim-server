@@ -89,6 +89,9 @@ class N8nOcrClient(
                         )
                     )
                 }
+            } finally {
+                runCatching { file.delete() }
+                    .onFailure { log.warn("Failed to delete uploaded prescription image: {}", file.absolutePath, it) }
             }
         }
     }
