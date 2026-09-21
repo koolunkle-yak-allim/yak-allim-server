@@ -32,6 +32,8 @@ class PrescriptionParser(
         private const val HEADER_DIST_THRESHOLD = 2
         private const val INSTRUCTION_NOISE_PENALTY_MULTIPLIER = 0.01
 
+        private const val DEFAULT_REFERENCE_WIDTH = 1920
+
         private val COLUMN_HEADER_GUIDE_JAMO = HangulUtils.normalizeToJamo("복약안내")
         private val DOSING_TAKE_UNIT_JAMO = HangulUtils.normalizeToJamo("씩")
         private val DOSING_FREQUENCY_UNIT_JAMO = HangulUtils.normalizeToJamo("회")
@@ -39,8 +41,20 @@ class PrescriptionParser(
         private val DOSING_FORM_UNIT_JAMO_MAP = setOf("정", "캡슐").associateWith { HangulUtils.normalizeToJamo(it) }
     }
 
-    fun parse(textBlocks: List<TextBlock>): List<PrescribedMedicine> {
+    /**
+     * @param imageWidth OCR에 사용된 원본 이미지의 가로 픽셀 크기. 좌표 관련 설정값을
+     * 이 값에 대한 비율로 환산하는 데 쓰인다(입력 해상도가 달라도 동일하게 동작하도록 함, S6 참고).
+     * 0 이하로 주어지면 [DEFAULT_REFERENCE_WIDTH] 기준으로 대체한다.
+     */
+    fun parse(textBlocks: List<TextBlock>, imageWidth: Int): List<PrescribedMedicine> {
         if (textBlocks.isEmpty()) return emptyList()
+
+        val referenceWidth = imageWidth.takeIf { it > 0 } ?: DEFAULT_REFERENCE_WIDTH
+        val columnSeparatorX = (ocrProperties.parser.columnSeparatorXRatio * referenceWidth).toInt()
+        val yOffset = (ocrProperties.parser.yOffsetRatio * referenceWidth).toInt()
+        val yDeviationThreshold = (ocrProperties.parser.yDeviationThresholdRatio * referenceWidth).toInt()
+        val medicineMinX = (ocrProperties.parser.medicineMinXRatio * referenceWidth).toInt()
+        val medicineMaxX = (ocrProperties.parser.medicineMaxXRatio * referenceWidth).toInt()
 
         val tiltAngle = calculateTiltAngle(textBlocks)
         val deskewed = if (abs(tiltAngle) > 1e-4) {
@@ -62,7 +76,7 @@ class PrescriptionParser(
 
         val blocks = deskewed.map { TextSegment(it.text, it.confidence, it.bounds) }
 
-        val separatorX = findSeparatorX(blocks)
+        val separatorX = findSeparatorX(blocks, columnSeparatorX)
         val (nameBlocks, guideBlocks) = blocks.partition { it.box.minX < separatorX }
 
         val mergedNames = mergeBlocks(nameBlocks)
@@ -72,7 +86,7 @@ class PrescriptionParser(
 
         return sortedGuides.map { guideBlock ->
             val centerY = guideBlock.box.centerY
-            val matchedName = findNameBlock(mergedNames, centerY)
+            val matchedName = findNameBlock(mergedNames, centerY, yOffset, yDeviationThreshold, medicineMinX, medicineMaxX)
 
             val extractedName = matchedName?.text ?: ""
             val standardName = medicineService.findStandardName(extractedName)
@@ -96,21 +110,28 @@ class PrescriptionParser(
         }
     }
 
-    private fun findSeparatorX(blocks: List<TextSegment>): Int {
+    private fun findSeparatorX(blocks: List<TextSegment>, fallbackSeparatorX: Int): Int {
         return blocks.firstOrNull { block ->
             val normalizedJamo = HangulUtils.normalizeToJamo(block.text.replace(" ", ""))
             HangulUtils.levenshteinDistanceTo(normalizedJamo, COLUMN_HEADER_GUIDE_JAMO) <= HEADER_DIST_THRESHOLD
-        }?.box?.minX ?: ocrProperties.parser.columnSeparatorX
+        }?.box?.minX ?: fallbackSeparatorX
     }
 
-    private fun findNameBlock(mergedNames: List<TextSegment>, guideBlockCenterY: Int): TextSegment? {
-        val expectedNameBlockCenterY = guideBlockCenterY + ocrProperties.parser.yOffset
+    private fun findNameBlock(
+        mergedNames: List<TextSegment>,
+        guideBlockCenterY: Int,
+        yOffset: Int,
+        yDeviationThreshold: Int,
+        medicineMinX: Int,
+        medicineMaxX: Int
+    ): TextSegment? {
+        val expectedNameBlockCenterY = guideBlockCenterY + yOffset
         return mergedNames.filter { block ->
-            block.box.minX in ocrProperties.parser.medicineMinX..ocrProperties.parser.medicineMaxX && abs(block.box.centerY - guideBlockCenterY) <= ocrProperties.parser.yDeviationThreshold
+            block.box.minX in medicineMinX..medicineMaxX && abs(block.box.centerY - guideBlockCenterY) <= yDeviationThreshold
         }.maxByOrNull { candidate ->
             val deviation = abs(candidate.box.centerY - expectedNameBlockCenterY).toDouble()
             val alignmentScore =
-                (1.0 - (deviation / ocrProperties.parser.yDeviationThreshold.toDouble())).coerceAtLeast(0.0)
+                (1.0 - (deviation / yDeviationThreshold.toDouble())).coerceAtLeast(0.0)
 
             val normalizedName = candidate.normalizedName
             val containsInstructionNoise =

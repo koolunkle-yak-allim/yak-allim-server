@@ -46,11 +46,11 @@ class OcrWebhookSecretTest {
                 )
             ),
             parser = OcrProperties.Parser(
-                yOffset = 20,
-                yDeviationThreshold = 75,
-                columnSeparatorX = 600,
-                medicineMinX = 130,
-                medicineMaxX = 260
+                yOffsetRatio = 0.0104,
+                yDeviationThresholdRatio = 0.0391,
+                columnSeparatorXRatio = 0.3125,
+                medicineMinXRatio = 0.0677,
+                medicineMaxXRatio = 0.1354
             ),
             n8n = OcrProperties.N8n(webhookUrl = "http://localhost:5678/webhook", webhookSecret = "correct-secret")
         )

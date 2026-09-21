@@ -17,6 +17,7 @@ import org.springframework.util.StopWatch
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import javax.imageio.ImageIO
 
 @Component
 class OcrJobProcessor(
@@ -61,6 +62,7 @@ class OcrJobProcessor(
 
             stopwatch.start("ONNX 추론")
             val textBlocks = Files.newInputStream(path).use { ocrEngine.runOcr(it, jobId) }
+            val imageWidth = readImageWidth(path)
             stopwatch.stop()
 
             ensureNotCancelled(jobId, "구조화 파싱")
@@ -68,7 +70,7 @@ class OcrJobProcessor(
             ocrProgressManager.publishProgress(jobId, PipelineStep.PARSING)
 
             stopwatch.start("구조화 파싱")
-            val medicines = prescriptionParser.parse(textBlocks)
+            val medicines = prescriptionParser.parse(textBlocks, imageWidth)
             stopwatch.stop()
 
             log.info("\n${stopwatch.prettyPrint()}")
@@ -128,6 +130,16 @@ class OcrJobProcessor(
     private fun ensureNotCancelled(jobId: String, stage: String) {
         if (ocrJobRepository.isCancelled(jobId)) {
             throw JobCancelledException("$stage 전 취소됨")
+        }
+    }
+
+    /** 좌표 정규화(S6)에 쓸 원본 이미지 가로 픽셀 크기. 읽기에 실패하면 0을 반환해 파서가 기본값으로 대체하도록 한다. */
+    private fun readImageWidth(path: Path): Int {
+        return runCatching {
+            Files.newInputStream(path).use { ImageIO.read(it)?.width ?: 0 }
+        }.getOrElse { e ->
+            log.warn("Failed to read image dimensions for coordinate normalization: {}", path, e)
+            0
         }
     }
 }
