@@ -14,7 +14,7 @@ class PrescriptionParserTest {
     @Autowired
     private lateinit var prescriptionParser: PrescriptionParser
 
-    // 테스트 프로퍼티 기준: column-separator-x=600, medicine-min-x=130, medicine-max-x=260
+    // 테스트 프로퍼티(비율) * imageWidth=1920 기준: column-separator-x=600, medicine-min-x=130, medicine-max-x=260
     private fun bounds(minX: Int, maxX: Int, minY: Int, maxY: Int): List<Point> = listOf(
         Point(minX, minY), Point(maxX, minY), Point(maxX, maxY), Point(minX, maxY)
     )
@@ -27,7 +27,7 @@ class PrescriptionParserTest {
             TextBlock("1정 3회 3일", 1.0f, bounds(700, 900, 80, 120))
         )
 
-        val medicines = prescriptionParser.parse(textBlocks)
+        val medicines = prescriptionParser.parse(textBlocks, imageWidth = 1920)
 
         val medicine = medicines.single()
         Assertions.assertEquals("이모튼캡슐", medicine.medicineName)
@@ -44,7 +44,7 @@ class PrescriptionParserTest {
             TextBlock("1정 3회 3일", 1.0f, bounds(700, 900, 80, 120))
         )
 
-        val medicines = prescriptionParser.parse(textBlocks)
+        val medicines = prescriptionParser.parse(textBlocks, imageWidth = 1920)
 
         val medicine = medicines.single()
         Assertions.assertEquals("테스트약품", medicine.medicineName)
