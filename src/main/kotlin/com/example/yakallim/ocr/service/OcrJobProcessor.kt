@@ -42,26 +42,26 @@ class OcrJobProcessor(
             throw SecurityException("Access denied: Invalid file path.")
         }
 
-        delay?.takeIf { it > 0 }?.let {
-            try {
-                Thread.sleep(it)
-            } catch (_: InterruptedException) {
-                Thread.currentThread().interrupt()
-            }
-        }
-
-        if (ocrJobRepository.isCancelled(jobId)) {
-            log.info("OCR job cancelled before processing: jobId='{}'", jobId)
-            ocrProgressManager.publishProgress(jobId, PipelineStep.FAILED, "작업이 취소되었습니다.")
-            return
-        }
-
-        ocrJobRepository.updateToProcessing(jobId)
-        ocrProgressManager.publishProgress(jobId, PipelineStep.IMAGE_PROCESSING)
-
-        val stopwatch = StopWatch(jobId)
-
         try {
+            delay?.takeIf { it > 0 }?.let {
+                try {
+                    Thread.sleep(it)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                }
+            }
+
+            if (ocrJobRepository.isCancelled(jobId)) {
+                log.info("OCR job cancelled before processing: jobId='{}'", jobId)
+                ocrProgressManager.publishProgress(jobId, PipelineStep.FAILED, "작업이 취소되었습니다.")
+                return
+            }
+
+            ocrJobRepository.updateToProcessing(jobId)
+            ocrProgressManager.publishProgress(jobId, PipelineStep.IMAGE_PROCESSING)
+
+            val stopwatch = StopWatch(jobId)
+
             check(!ocrJobRepository.isCancelled(jobId)) { "ONNX 추론 전 취소됨" }
 
             stopwatch.start("ONNX 추론")
@@ -124,6 +124,9 @@ class OcrJobProcessor(
                     "message" to userFacingMessage
                 )
             )
+        } finally {
+            runCatching { Files.deleteIfExists(normalizedPath) }
+                .onFailure { log.warn("Failed to delete uploaded prescription image: {}", normalizedPath, it) }
         }
     }
 }
