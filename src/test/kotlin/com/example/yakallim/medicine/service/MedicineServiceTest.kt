@@ -28,6 +28,14 @@ class MedicineServiceTest {
     }
 
     @Test
+    @DisplayName("사전에 없는 약품명은 원문을 유지한다")
+    fun shouldKeepRawNameWhenNotInDictionary() {
+        listOf("타이레놀정", "아스피린정", "게보린정", "훼스탈정").forEach {
+            Assertions.assertEquals(it, medicineService.findStandardName(it))
+        }
+    }
+
+    @Test
     @DisplayName("새로운 약품 저장 시 normalizedName이 자동으로 갱신된다")
     @Transactional
     fun shouldAutomaticallyUpdateNormalizedNameOnSave() {

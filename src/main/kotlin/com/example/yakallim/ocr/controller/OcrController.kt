@@ -3,10 +3,16 @@ package com.example.yakallim.ocr.controller
 import com.example.yakallim.ocr.config.OcrProperties
 import com.example.yakallim.ocr.dto.N8nCallbackRequest
 import com.example.yakallim.ocr.dto.OcrJobResponse
+import com.example.yakallim.ocr.dto.OcrProgressResponse
 import com.example.yakallim.ocr.exception.OcrException
 import com.example.yakallim.ocr.service.N8nOcrService
 import com.example.yakallim.ocr.service.OcrProgressManager
 import com.example.yakallim.ocr.service.OcrService
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.media.Content
+import io.swagger.v3.oas.annotations.media.Schema
+import io.swagger.v3.oas.annotations.responses.ApiResponse
+import io.swagger.v3.oas.annotations.responses.ApiResponses
 import jakarta.servlet.http.HttpServletResponse
 import jakarta.validation.Valid
 import org.slf4j.LoggerFactory
@@ -17,6 +23,7 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.multipart.MultipartFile
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
+import java.security.MessageDigest
 
 @RestController
 @RequestMapping("/api/v1/ocr")
@@ -44,6 +51,17 @@ class OcrController(
         return ResponseEntity.ok(job)
     }
 
+    @Operation(
+        summary = "OCR 작업 진행률 구독 (SSE)",
+        description = "`connect`, `progress` 이벤트를 전송하는 Server-Sent Events 스트림입니다. " +
+            "`progress` 이벤트의 payload는 OcrProgressResponse 스키마를 따릅니다."
+    )
+    @ApiResponses(
+        ApiResponse(
+            responseCode = "200",
+            content = [Content(mediaType = MediaType.TEXT_EVENT_STREAM_VALUE, schema = Schema(implementation = OcrProgressResponse::class))]
+        )
+    )
     @GetMapping("/jobs/{jobId}/progress", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
     fun getJobProgress(
         @PathVariable jobId: String,
@@ -68,10 +86,14 @@ class OcrController(
     ): ResponseEntity<Unit> {
         // Validate webhook secret
         val configuredSecret = ocrProperties.n8n.webhookSecret.trim()
-        val receivedSecret = webhookSecret?.trim()
-        if (configuredSecret.isNotBlank() && receivedSecret != configuredSecret) {
+        val receivedSecret = webhookSecret?.trim() ?: ""
+        val isSecretValid = MessageDigest.isEqual(
+            configuredSecret.toByteArray(),
+            receivedSecret.toByteArray()
+        )
+        if (configuredSecret.isNotBlank() && !isSecretValid) {
             log.warn("Webhook secret verification failed: unauthorized request")
-            throw OcrException.IllegalJobStateException("유효하지 않은 webhook 요청입니다.")
+            throw OcrException.UnauthorizedWebhookException()
         }
 
         // Validate jobId matches between path and body
