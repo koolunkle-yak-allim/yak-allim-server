@@ -115,4 +115,16 @@ class OcrControllerTest {
                 .file(mockMultipartFile)
         ).andExpect(MockMvcResultMatchers.status().isBadRequest)
     }
+
+    @Test
+    @DisplayName("빈 파일 업로드 시 BAD_REQUEST를 반환한다")
+    fun shouldRejectEmptyFile() {
+        val emptyMultipartFile =
+            MockMultipartFile("file", "test.jpg", MediaType.IMAGE_JPEG_VALUE, ByteArray(0))
+
+        mockMvc.perform(
+            MockMvcRequestBuilders.multipart("/api/v1/ocr/enqueue")
+                .file(emptyMultipartFile)
+        ).andExpect(MockMvcResultMatchers.status().isBadRequest)
+    }
 }

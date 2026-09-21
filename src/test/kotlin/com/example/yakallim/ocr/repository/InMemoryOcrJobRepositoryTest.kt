@@ -1,7 +1,9 @@
 package com.example.yakallim.ocr.repository
 
+import com.example.yakallim.ocr.dto.OcrResponse
 import com.example.yakallim.ocr.model.JobStatus
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -73,5 +75,42 @@ class InMemoryOcrJobRepositoryTest {
 
         assertTrue(staleAccepted.isEmpty())
         assertTrue(staleProcessing.isEmpty())
+    }
+
+    @Test
+    @DisplayName("취소된 작업은 이후 처리중/실패로 전이되지 않는다 (취소 우선)")
+    fun cancelledJobCannotTransitionToProcessingOrFailed() {
+        repository.registerJob("job-1")
+        repository.updateToCancelled("job-1")
+
+        repository.updateToProcessing("job-1")
+        assertEquals(JobStatus.CANCELLED, repository.getJob("job-1")?.status)
+
+        repository.updateToFailed("job-1", "늦게 도착한 오류")
+        assertEquals(JobStatus.CANCELLED, repository.getJob("job-1")?.status)
+    }
+
+    @Test
+    @DisplayName("취소된 작업은 이후 완료 처리도 거부되고 결과가 반영되지 않는다")
+    fun cancelledJobCannotTransitionToCompleted() {
+        repository.registerJob("job-1")
+        repository.updateToCancelled("job-1")
+
+        val applied = repository.updateToCompleted("job-1", OcrResponse(fileName = "a.jpg", message = "ok"))
+
+        assertFalse(applied, "취소된 작업에는 완료 처리가 적용되지 않아야 합니다.")
+        assertEquals(JobStatus.CANCELLED, repository.getJob("job-1")?.status)
+    }
+
+    @Test
+    @DisplayName("ACCEPTED나 PROCESSING이 아닌 작업은 완료 처리가 적용되지 않는다")
+    fun completingAJobNotInAcceptedOrProcessingStateIsNoOp() {
+        repository.registerJob("job-1")
+        repository.updateToFailed("job-1", "이미 실패함")
+
+        val applied = repository.updateToCompleted("job-1", OcrResponse(fileName = "a.jpg", message = "ok"))
+
+        assertFalse(applied)
+        assertEquals(JobStatus.FAILED, repository.getJob("job-1")?.status)
     }
 }

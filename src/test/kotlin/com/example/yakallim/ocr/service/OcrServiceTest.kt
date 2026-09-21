@@ -3,6 +3,7 @@ package com.example.yakallim.ocr.service
 import com.example.yakallim.ocr.engine.OcrEngine
 import com.example.yakallim.ocr.parser.PrescriptionParser
 import org.junit.jupiter.api.Assertions
+import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -66,7 +67,7 @@ class OcrServiceTest {
     @DisplayName("실제 처방전 이미지 파일 OCR 분석 및 오타 교정을 검증한다")
     fun shouldProcessRealImageWithOcrAndFuzzyCorrection() {
         val imageFile = File("outputs/api-images/sample.jpg")
-        if (!imageFile.exists()) return
+        Assumptions.assumeTrue(imageFile.exists(), "${imageFile.path} 샘플 이미지가 없어 테스트를 건너뜁니다.")
         verifyOcrPipeline(imageFile)
     }
 
