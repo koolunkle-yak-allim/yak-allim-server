@@ -1,5 +1,6 @@
 package com.example.yakallim.ocr.service
 
+import com.example.yakallim.medicine.service.MedicineService
 import com.example.yakallim.notification.service.PushNotificationClient
 import com.example.yakallim.ocr.dto.OcrResponse
 import com.example.yakallim.ocr.engine.N8nOcrClient
@@ -19,6 +20,7 @@ class N8nOcrService(
     ocrJobRepository: OcrJobRepository,
     ocrProgressManager: OcrProgressManager,
     private val n8nOcrClient: N8nOcrClient,
+    private val medicineService: MedicineService,
     @param:Qualifier("FCM_CLIENT") private val notifier: PushNotificationClient,
     @Value("\${ocr.upload-dir:outputs/api-images}") uploadDirStr: String
 ) : OcrService(ocrJobRepository, ocrProgressManager, uploadDirStr) {
@@ -56,12 +58,23 @@ class N8nOcrService(
         )
     }
 
+    /** 로컬 파이프라인(PrescriptionParser)과 동일하게, n8n이 넘긴 약품명도 서버 사전으로 표준화한다. */
+    private fun normalizeMedicineNames(medicines: List<PrescribedMedicine>): List<PrescribedMedicine> =
+        medicines.map { medicine ->
+            val standardName = medicineService.findStandardName(medicine.medicineName)
+            medicine.copy(
+                medicineName = standardName,
+                rawName = medicine.medicineName,
+                autoCorrected = standardName != medicine.medicineName
+            )
+        }
+
     fun handleCallback(jobId: String, medicines: List<PrescribedMedicine>) {
         val response = OcrResponse(
             fileName = "n8n_ocr_$jobId",
             message = "복약 안내서 분석이 완료되었습니다.\n복약 지침을 확인해 보세요.",
             textBlocks = emptyList(),
-            medicines = medicines
+            medicines = normalizeMedicineNames(medicines)
         )
 
         val transitionApplied = ocrJobRepository.updateToCompleted(jobId, response)
