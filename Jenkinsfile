@@ -2,7 +2,9 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = 'yak-allim-backend:latest'
+        IMAGE_REPOSITORY    = 'yak-allim-backend'
+        IMAGE_NAME          = "yak-allim-backend:${env.BUILD_NUMBER}"
+        IMAGE_RETENTION_COUNT = '5'
         JENKINS_NODE_COOKIE = 'dontKillMe'
         SLACK_CREDENTIAL_ID = 'slack-bot-token'
         SLACK_CHANNEL       = '#app-deploy-alerts'
