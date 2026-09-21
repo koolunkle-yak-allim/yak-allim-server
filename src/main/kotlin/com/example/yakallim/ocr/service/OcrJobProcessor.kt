@@ -31,7 +31,7 @@ class OcrJobProcessor(
     private val log = LoggerFactory.getLogger(OcrJobProcessor::class.java)
     private val baseDir = Paths.get(uploadDirStr).toAbsolutePath().normalize()
 
-    @Async
+    @Async("ocrTaskExecutor")
     fun executeTask(
         jobId: String,
         path: Path,

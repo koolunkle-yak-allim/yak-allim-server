@@ -3,6 +3,7 @@ package com.example.yakallim.ocr.service
 import com.example.yakallim.notification.service.PushNotificationClient
 import com.example.yakallim.ocr.dto.OcrJobResponse
 import com.example.yakallim.ocr.dto.OcrResponse
+import com.example.yakallim.ocr.model.JobStatus
 import com.example.yakallim.ocr.repository.OcrJobRepository
 
 internal class FakeOcrJobRepository : OcrJobRepository {
@@ -10,8 +11,13 @@ internal class FakeOcrJobRepository : OcrJobRepository {
     var failedCalled = false
     var cancelledLoggedAsFailure = false
     var lastFailureReason: String? = null
+    var registeredJobId: String? = null
 
-    override fun registerJob(jobId: String): OcrJobResponse = throw NotImplementedError()
+    override fun registerJob(jobId: String): OcrJobResponse {
+        registeredJobId = jobId
+        return OcrJobResponse(jobId = jobId, status = JobStatus.ACCEPTED)
+    }
+
     override fun updateToProcessing(jobId: String) {}
     override fun updateToCompleted(jobId: String, result: OcrResponse): Boolean = true
     override fun updateToFailed(jobId: String, errorMessage: String) {

@@ -33,7 +33,7 @@ class N8nOcrClient(
 ) {
     private val log = LoggerFactory.getLogger(N8nOcrClient::class.java)
 
-    @Async
+    @Async("ocrTaskExecutor")
     fun sendToN8nAsync(jobId: String, file: File, fcmToken: String?, onDispatchFailure: (String) -> Unit) {
         runBlocking {
             try {
