@@ -56,7 +56,7 @@ class OcrServiceTest {
         }
 
         val ocrResults = ocrEngine.runOcr(imageInputStream)
-        val instructions = prescriptionParser.parse(ocrResults)
+        val instructions = prescriptionParser.parse(ocrResults, width)
 
         Assertions.assertNotNull(ocrResults)
         Assertions.assertNotNull(instructions)
@@ -85,7 +85,8 @@ class OcrServiceTest {
         }
         println("==================================")
 
-        val instructions = prescriptionParser.parse(ocrResults)
+        val imageWidth = runCatching { ImageIO.read(imageFile)?.width ?: 0 }.getOrDefault(0)
+        val instructions = prescriptionParser.parse(ocrResults, imageWidth)
         Assertions.assertNotNull(instructions, "${imageFile.name} 파일의 파싱 결과가 존재하지 않습니다.")
 
         println("=== 이미지 구조화 파싱 결과 (${imageFile.name}) ===")
