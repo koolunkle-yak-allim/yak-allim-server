@@ -74,6 +74,7 @@ docker create \
     --restart unless-stopped \
     --network app-network \
     -p "${TARGET_PORT}:8081" \
+    -e OCR_N8N_WEBHOOK_SECRET="${OCR_N8N_WEBHOOK_SECRET}" \
     "${IMAGE_NAME}" \
     --server.port=8081 \
     --notification.firebase.key-path="file:/app/yak-allim-firebase-key.json" \

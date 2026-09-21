@@ -33,7 +33,10 @@ pipeline {
 
         stage('Deploy') {
             steps {
-                withCredentials([file(credentialsId: 'firebase-messaging-key', variable: 'FIREBASE_KEY_FILE')]) {
+                withCredentials([
+                    file(credentialsId: 'firebase-messaging-key', variable: 'FIREBASE_KEY_FILE'),
+                    string(credentialsId: 'ocr-n8n-webhook-secret', variable: 'OCR_N8N_WEBHOOK_SECRET')
+                ]) {
                     script {
                         if (isUnix()) {
                             sh 'chmod +x scripts/deploy.sh'
