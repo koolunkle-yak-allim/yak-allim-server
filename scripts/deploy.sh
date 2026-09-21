@@ -5,8 +5,13 @@ echo "=== [Deploy Stage] Blue-Green Deployment Started ==="
 
 DEPLOY_DIR="${DEPLOY_DIR:-${WORKSPACE}/deploy}"
 RESOURCE_DIR="${RESOURCE_DIR:-}"
-IMAGE_NAME="${IMAGE_NAME:-yak-allim-backend:latest}"
+IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-yak-allim-backend}"
+IMAGE_NAME="${IMAGE_NAME:-${IMAGE_REPOSITORY}:latest}"
+IMAGE_RETENTION_COUNT="${IMAGE_RETENTION_COUNT:-5}"
 N8N_WEBHOOK_URL="${N8N_WEBHOOK_URL:-http://yak-allim-n8n:5678/webhook/ocr}"
+# 전환 직후 곧바로 종료하지 않고, 처리 중이던 요청이 끝날 시간을 준 뒤 graceful stop 함.
+OLD_CONTAINER_DRAIN_WAIT_SECONDS="${OLD_CONTAINER_DRAIN_WAIT_SECONDS:-30}"
+OLD_CONTAINER_STOP_TIMEOUT_SECONDS="${OLD_CONTAINER_STOP_TIMEOUT_SECONDS:-70}"
 
 # 1. 배포 디렉터리 생성 및 키/모델 준비
 mkdir -p "${DEPLOY_DIR}/models"
@@ -123,17 +128,32 @@ if [ "$HEALTH_SUCCESS" = "true" ]; then
     echo "=== NGINX 설정 재설정 ==="
     docker exec yak-allim-nginx nginx -s reload
 
-    # 8. 이전 구버전 컨테이너 정지 및 삭제
+    # 8. 이전 구버전 컨테이너 드레이닝 후 정지 및 삭제
+    # "무중단"은 신규 요청 기준입니다. 전환 시점에 구버전 컨테이너가 처리 중이던 요청은
+    # 작업 상태가 서버 메모리에만 있어(S2) 드레이닝 중에도 유실될 수 있습니다.
     OLD_CONTAINER_ID=$(docker ps --filter "name=^/${OLD_CONTAINER_NAME}$" --filter "status=running" -q 2>/dev/null || true)
     if [ -n "$OLD_CONTAINER_ID" ]; then
         if [ -n "$MY_CONTAINER_ID" ] && [ "$OLD_CONTAINER_ID" = "$MY_CONTAINER_ID" ]; then
             echo "Warning: Jenkins 컨테이너는 구버전 정지 대상에서 제외합니다."
         else
-            echo "=== 이전 구버전 컨테이너(${OLD_CONTAINER_NAME}) 정지 및 정리 중... ==="
-            docker stop "$OLD_CONTAINER_ID" 2>/dev/null || true
+            echo "=== 이전 구버전 컨테이너(${OLD_CONTAINER_NAME}) 드레이닝 대기 (${OLD_CONTAINER_DRAIN_WAIT_SECONDS}초)... ==="
+            sleep "${OLD_CONTAINER_DRAIN_WAIT_SECONDS}"
+            echo "=== 이전 구버전 컨테이너(${OLD_CONTAINER_NAME}) graceful stop (타임아웃 ${OLD_CONTAINER_STOP_TIMEOUT_SECONDS}초) 및 정리 중... ==="
+            docker stop -t "${OLD_CONTAINER_STOP_TIMEOUT_SECONDS}" "$OLD_CONTAINER_ID" 2>/dev/null || true
             docker rm -f "$OLD_CONTAINER_ID" 2>/dev/null || true
         fi
     fi
+
+    # 9. 오래된 이미지 정리 (최근 IMAGE_RETENTION_COUNT개만 보존, 롤백용으로 남겨둠)
+    echo "=== 오래된 ${IMAGE_REPOSITORY} 이미지 정리 (최근 ${IMAGE_RETENTION_COUNT}개 보존) ==="
+    docker images "${IMAGE_REPOSITORY}" --format '{{.Tag}} {{.CreatedAt}}' \
+        | grep -E '^[0-9]+ ' \
+        | sort -k2 -r \
+        | awk -v keep="${IMAGE_RETENTION_COUNT}" 'NR > keep { print $1 }' \
+        | while read -r old_tag; do
+            echo "삭제: ${IMAGE_REPOSITORY}:${old_tag}"
+            docker rmi "${IMAGE_REPOSITORY}:${old_tag}" 2>/dev/null || true
+        done
 else
     echo "=== 신규 컨테이너(${TARGET_NAME}) 헬스 체크 실패 ==="
     docker logs --tail 30 "${TARGET_NAME}" 2>/dev/null || true

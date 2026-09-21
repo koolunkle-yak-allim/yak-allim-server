@@ -4,8 +4,13 @@ Write-Host "=== [Deploy Stage] Blue-Green Deployment Started (Windows) ==="
 
 $deployDir = if ($env:DEPLOY_DIR) { $env:DEPLOY_DIR } else { "$env:WORKSPACE\deploy" }
 $resourceDir = if ($env:RESOURCE_DIR) { $env:RESOURCE_DIR } else { "" }
-$imageName = if ($env:IMAGE_NAME) { $env:IMAGE_NAME } else { "yak-allim-backend:latest" }
+$imageRepository = if ($env:IMAGE_REPOSITORY) { $env:IMAGE_REPOSITORY } else { "yak-allim-backend" }
+$imageName = if ($env:IMAGE_NAME) { $env:IMAGE_NAME } else { "${imageRepository}:latest" }
+$imageRetentionCount = if ($env:IMAGE_RETENTION_COUNT) { [int]$env:IMAGE_RETENTION_COUNT } else { 5 }
 $n8nWebhookUrl = if ($env:N8N_WEBHOOK_URL) { $env:N8N_WEBHOOK_URL } else { "http://yak-allim-n8n:5678/webhook/ocr" }
+# 전환 직후 곧바로 종료하지 않고, 처리 중이던 요청이 끝날 시간을 준 뒤 graceful stop 함.
+$oldContainerDrainWaitSeconds = if ($env:OLD_CONTAINER_DRAIN_WAIT_SECONDS) { [int]$env:OLD_CONTAINER_DRAIN_WAIT_SECONDS } else { 30 }
+$oldContainerStopTimeoutSeconds = if ($env:OLD_CONTAINER_STOP_TIMEOUT_SECONDS) { [int]$env:OLD_CONTAINER_STOP_TIMEOUT_SECONDS } else { 70 }
 
 # 1. 배포 디렉터리 생성 및 키/모델 준비
 if (!(Test-Path -Path "$deployDir")) {
@@ -127,7 +132,9 @@ if ($healthSuccess) {
     docker exec yak-allim-nginx nginx -s reload
     $ErrorActionPreference = 'Stop'
 
-    # 8. 이전 구버전 컨테이너 정지 및 삭제
+    # 8. 이전 구버전 컨테이너 드레이닝 후 정지 및 삭제
+    # "무중단"은 신규 요청 기준입니다. 전환 시점에 구버전 컨테이너가 처리 중이던 요청은
+    # 작업 상태가 서버 메모리에만 있어(S2) 드레이닝 중에도 유실될 수 있습니다.
     $ErrorActionPreference = 'SilentlyContinue'
     $oldContainerId = docker ps --filter "name=^/${oldContainerName}$" --filter "status=running" -q
     $ErrorActionPreference = 'Stop'
@@ -135,13 +142,32 @@ if ($healthSuccess) {
         if ($myContainerId -and ($oldContainerId -eq $myContainerId)) {
             Write-Host "Warning: Jenkins 컨테이너는 구버전 정지 대상에서 제외합니다."
         } else {
-            Write-Host "=== 이전 구버전 컨테이너(${oldContainerName}) 정지 및 정리 중... ==="
+            Write-Host "=== 이전 구버전 컨테이너(${oldContainerName}) 드레이닝 대기 (${oldContainerDrainWaitSeconds}초)... ==="
+            Start-Sleep -Seconds $oldContainerDrainWaitSeconds
+            Write-Host "=== 이전 구버전 컨테이너(${oldContainerName}) graceful stop (타임아웃 ${oldContainerStopTimeoutSeconds}초) 및 정리 중... ==="
             $ErrorActionPreference = 'SilentlyContinue'
-            docker stop $oldContainerId
+            docker stop -t $oldContainerStopTimeoutSeconds $oldContainerId
             docker rm -f $oldContainerId
             $ErrorActionPreference = 'Stop'
         }
     }
+
+    # 9. 오래된 이미지 정리 (최근 imageRetentionCount개만 보존, 롤백용으로 남겨둠)
+    Write-Host "=== 오래된 ${imageRepository} 이미지 정리 (최근 ${imageRetentionCount}개 보존) ==="
+    $ErrorActionPreference = 'SilentlyContinue'
+    $oldTags = docker images $imageRepository --format '{{.Tag}}|{{.CreatedAt}}' |
+        Where-Object { $_ -match '^\d+\|' } |
+        ForEach-Object {
+            $parts = $_ -split '\|', 2
+            [PSCustomObject]@{ Tag = $parts[0]; CreatedAt = $parts[1] }
+        } |
+        Sort-Object -Property CreatedAt -Descending |
+        Select-Object -Skip $imageRetentionCount
+    foreach ($old in $oldTags) {
+        Write-Host "삭제: ${imageRepository}:$($old.Tag)"
+        docker rmi "${imageRepository}:$($old.Tag)"
+    }
+    $ErrorActionPreference = 'Stop'
 } else {
     Write-Host "=== 신규 컨테이너(${targetName}) 헬스 체크 실패 ==="
     docker logs --tail 30 $targetName
