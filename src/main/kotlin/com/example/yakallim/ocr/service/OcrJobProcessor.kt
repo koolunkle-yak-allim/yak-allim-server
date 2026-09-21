@@ -3,6 +3,7 @@ package com.example.yakallim.ocr.service
 import com.example.yakallim.notification.service.PushNotificationClient
 import com.example.yakallim.ocr.dto.OcrResponse
 import com.example.yakallim.ocr.engine.OcrEngine
+import com.example.yakallim.ocr.exception.JobCancelledException
 import com.example.yakallim.ocr.exception.OcrErrorMessageResolver
 import com.example.yakallim.ocr.model.PipelineStep
 import com.example.yakallim.ocr.parser.PrescriptionParser
@@ -51,24 +52,18 @@ class OcrJobProcessor(
                 }
             }
 
-            if (ocrJobRepository.isCancelled(jobId)) {
-                log.info("OCR job cancelled before processing: jobId='{}'", jobId)
-                ocrProgressManager.publishProgress(jobId, PipelineStep.FAILED, "작업이 취소되었습니다.")
-                return
-            }
+            ensureNotCancelled(jobId, "ONNX 추론")
 
             ocrJobRepository.updateToProcessing(jobId)
             ocrProgressManager.publishProgress(jobId, PipelineStep.IMAGE_PROCESSING)
 
             val stopwatch = StopWatch(jobId)
 
-            check(!ocrJobRepository.isCancelled(jobId)) { "ONNX 추론 전 취소됨" }
-
             stopwatch.start("ONNX 추론")
             val textBlocks = Files.newInputStream(path).use { ocrEngine.runOcr(it, jobId) }
             stopwatch.stop()
 
-            check(!ocrJobRepository.isCancelled(jobId)) { "구조화 파싱 전 취소됨" }
+            ensureNotCancelled(jobId, "구조화 파싱")
 
             ocrProgressManager.publishProgress(jobId, PipelineStep.PARSING)
 
@@ -96,7 +91,7 @@ class OcrJobProcessor(
                 )
             }
 
-            check(!ocrJobRepository.isCancelled(jobId)) { "알림 전송 전 취소됨" }
+            ensureNotCancelled(jobId, "알림 전송")
 
             notifier.notify(
                 token = token ?: "",
@@ -104,7 +99,7 @@ class OcrJobProcessor(
                 body = response.message,
                 data = mapOf("jobId" to jobId, "status" to "COMPLETED", "message" to response.message)
             )
-        } catch (e: IllegalStateException) {
+        } catch (e: JobCancelledException) {
             log.info("OCR job cancelled: jobId='{}', reason='{}'", jobId, e.message)
             ocrProgressManager.publishProgress(jobId, PipelineStep.FAILED, "작업이 취소되었습니다.")
         } catch (e: Exception) {
@@ -127,6 +122,12 @@ class OcrJobProcessor(
         } finally {
             runCatching { Files.deleteIfExists(normalizedPath) }
                 .onFailure { log.warn("Failed to delete uploaded prescription image: {}", normalizedPath, it) }
+        }
+    }
+
+    private fun ensureNotCancelled(jobId: String, stage: String) {
+        if (ocrJobRepository.isCancelled(jobId)) {
+            throw JobCancelledException("$stage 전 취소됨")
         }
     }
 }
