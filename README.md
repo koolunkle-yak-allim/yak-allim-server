@@ -73,7 +73,7 @@ com.example.yakallim
 ### Configuration
 
 1. Firebase Console에서 발급받은 서비스 계정 키 파일의 이름을 `yak-allim-firebase-key.json`으로 변경하여 백엔드 프로젝트 루트 디렉터리에 배치합니다.
-2. `src/main/resources/application.properties` 파일에서 사용할 OCR 엔진 타입을 지정합니다:
+2. `src/main/resources/application.properties` 파일에서 사용할 OCR 엔진 타입을 지정합니다. `ocr.type=local`은 서버가 ONNX Runtime으로 직접 추론하며 아래 3번의 모델 파일이 필요하고, `ocr.type=n8n`은 이미지를 n8n Webhook으로 전달해 n8n 워크플로우가 분석 후 콜백(`POST /api/v1/ocr/n8n/callback/{jobId}`)하는 방식으로 모델 파일은 필요 없는 대신 `OCR_N8N_WEBHOOK_SECRET` 환경 변수가 필요합니다:
 
    ```properties
    # OCR 엔진 타입 선택: local (로컬 ONNX 엔진) 또는 n8n (n8n Webhook 연동)
@@ -81,12 +81,16 @@ com.example.yakallim
    ocr.n8n.webhook-url=http://localhost:5678/webhook-test/ocr
    ```
 
-3. `ocr.type=local` 모드를 사용할 경우 `src/main/resources/models/` 경로에 아래 모델 파일과 사전이 존재하는지 확인합니다.
+   `ocr.type=n8n`일 때는 `OCR_N8N_WEBHOOK_SECRET` 환경 변수가 반드시 필요합니다(비어 있으면 기동에 실패합니다).
+   이 값은 서버 → n8n 요청에는 `X-N8N-WEBHOOK-SECRET` 헤더로, n8n → 서버 콜백에는 `X-N8N-Secret` 헤더로
+   전달됩니다(양방향 헤더 이름이 다르니 n8n 워크플로우 설정 시 유의하세요).
+
+3. `ocr.type=local` 모드를 사용할 경우 `src/main/resources/models/` 경로에 아래 모델 파일과 사전이 존재하는지 확인합니다. `*.onnx` 파일은 용량 문제로 `.gitignore`에 포함되어 있어 저장소에 없으므로, [PaddleOCR PP-OCRv4](https://github.com/PaddlePaddle/PaddleOCR) 등에서 별도로 받아 ONNX로 변환하거나 보유한 모델 파일을 직접 배치해야 합니다.
    - `ch_PP-OCRv4_det_infer.onnx` (텍스트 영역 검출 모델)
    - `korean_PP-OCRv4_rec_infer.onnx` (텍스트 인식 모델)
-   - `korean_dict.txt` (텍스트 인식용 단어 사전)
+   - `korean_dict.txt` (텍스트 인식용 단어 사전, 저장소에 포함되어 있음)
 4. `src/main/resources/data/` 경로에 의약품 사전 데이터가 존재하는지 확인합니다.
-   - `medicines.csv`
+   - `medicines.csv`: 현재 6건의 예시 데이터만 포함된 테스트용 사전입니다(공식 의약품 데이터 출처 아님). 실제 서비스에 쓰려면 [식품의약품안전처 의약품안전나라](https://nedrug.mfds.go.kr) 등 공신력 있는 출처의 데이터로 교체하고 출처·라이선스를 이 문서에 명시해야 합니다.
 
 ### Installation & Build
 
@@ -103,3 +107,15 @@ com.example.yakallim
    ```bash
    ./gradlew bootRun
    ```
+
+---
+
+## Known Limitations
+
+현재 알려진 제약사항입니다. 각 항목은 순차적으로 개선할 계획입니다.
+
+- **의약품 사전 규모**: `medicines.csv`가 6건뿐인 테스트용 데이터라, 사전에 없는 약품명이 엉뚱한 이름으로 교정될 수 있습니다.
+- **작업 상태 영속성 없음**: OCR 작업 상태가 메모리(`ConcurrentHashMap`)에만 저장되어 서버 재시작 시 모두 사라지고, n8n 콜백이 오지 않으면 작업이 `PROCESSING` 상태로 영구히 남을 수 있습니다.
+- **파서의 좌표 기반 파싱**: 처방전 이미지 파서가 절대 픽셀 좌표 설정값에 의존하고 있어, 학습에 쓰인 샘플과 해상도가 다른 이미지에서는 정확도가 떨어질 수 있습니다.
+- **n8n 모드와 로컬 모드 결과 차이**: 의약품명 정규화(오타 교정)가 로컬 파이프라인에서만 적용되고, n8n 콜백 결과에는 적용되지 않습니다.
+- **비동기 작업 동시 실행 수 제한 없음**: OCR 비동기 처리에 별도 스레드풀 설정이 없어 Spring Boot 기본 실행기를 사용하며, 동시 요청이 많을 경우 자원 사용량이 급격히 늘어날 수 있습니다.
