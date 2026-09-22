@@ -12,9 +12,11 @@ import io.ktor.client.request.forms.formData
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
+import io.ktor.http.isSuccess
 import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
@@ -46,7 +48,7 @@ class N8nOcrClient(
 
                 ocrProgressManager.publishProgress(jobId, PipelineStep.TEXT_DETECTION)
 
-                httpClient.post(uri) {
+                val response = httpClient.post(uri) {
                     if (ocrProperties.n8n.webhookSecret.isNotBlank()) {
                         header("X-N8N-WEBHOOK-SECRET", ocrProperties.n8n.webhookSecret)
                     }
@@ -64,6 +66,12 @@ class N8nOcrClient(
                             }
                         )
                     )
+                }
+
+                // Ktor의 기본 HttpClient는 4xx/5xx 응답에도 예외를 던지지 않으므로,
+                // 상태 코드를 직접 확인하지 않으면 n8n이 요청을 거부해도 성공한 것처럼 넘어간다.
+                if (!response.status.isSuccess()) {
+                    error("n8n webhook 요청이 거부되었습니다: HTTP ${response.status.value} ${response.bodyAsText().take(200)}")
                 }
 
                 ocrProgressManager.publishProgress(jobId, PipelineStep.TEXT_RECOGNITION)

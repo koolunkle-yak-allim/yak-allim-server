@@ -59,6 +59,7 @@ dependencies {
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
+    testImplementation("io.ktor:ktor-client-mock:$ktorVersion")
 }
 
 configurations.all {
