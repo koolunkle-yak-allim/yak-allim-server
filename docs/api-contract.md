@@ -15,13 +15,13 @@
 
 Base path: `/api/v1/ocr`
 
-| Method | Path | 요청 | 응답 | 비고 |
-| --- | --- | --- | --- | --- |
-| POST | `/enqueue` | `multipart/form-data`: `file`(필수, jpg/png/gif/webp), `fcmToken`(선택) | `202 Accepted` + `OcrJobResponse` | 작업을 등록하고 즉시 반환, 처리는 비동기 |
-| GET | `/jobs/{jobId}` | - | `200 OK` + `OcrJobResponse` / `404 Not Found` | 작업 현재 상태 조회 |
-| GET | `/jobs/{jobId}/progress` | - | `200 OK`, `text/event-stream` | 아래 [SSE 이벤트](#sse-이벤트) 참고 |
-| POST | `/jobs/{jobId}/cancel` | - | `204 No Content` / `400 Bad Request` / `404 Not Found` | 진행 중인 작업 취소. 이미 종료된 작업은 400 |
-| POST | `/n8n/callback/{jobId}` | 헤더 `X-N8N-Secret`, 본문 `N8nCallbackRequest` | `200 OK` / `400 Bad Request` / `401 Unauthorized` | n8n 워크플로우 전용 |
+| Method | Path                     | 요청                                                                  | 응답                                                     | 비고                          |
+|--------|--------------------------|---------------------------------------------------------------------|--------------------------------------------------------|-----------------------------|
+| POST   | `/enqueue`               | `multipart/form-data`: `file`(필수, jpg/png/gif/webp), `fcmToken`(선택) | `202 Accepted` + `OcrJobResponse`                      | 작업을 등록하고 즉시 반환, 처리는 비동기     |
+| GET    | `/jobs/{jobId}`          | -                                                                   | `200 OK` + `OcrJobResponse` / `404 Not Found`          | 작업 현재 상태 조회                 |
+| GET    | `/jobs/{jobId}/progress` | -                                                                   | `200 OK`, `text/event-stream`                          | 아래 [SSE 이벤트](#sse-이벤트) 참고   |
+| POST   | `/jobs/{jobId}/cancel`   | -                                                                   | `204 No Content` / `400 Bad Request` / `404 Not Found` | 진행 중인 작업 취소. 이미 종료된 작업은 400 |
+| POST   | `/n8n/callback/{jobId}`  | 헤더 `X-N8N-Secret`, 본문 `N8nCallbackRequest`                          | `200 OK` / `400 Bad Request` / `401 Unauthorized`      | n8n 워크플로우 전용                |
 
 ### `OcrJobResponse`
 
@@ -55,11 +55,11 @@ Base path: `/api/v1/ocr`
 
 `GET /jobs/{jobId}/progress`
 
-| 이벤트 이름 | 발생 시점 | payload |
-| --- | --- | --- |
-| `connect` | 구독 시작 시 1회 | 단순 텍스트 (`"Connected to progress stream for job: {jobId}"`) |
-| `progress` | 진행 단계가 바뀔 때마다 | `OcrProgressResponse` (아래) |
-| (comment) `keep-alive` | 15초마다 | SSE 주석(named event 아님, 연결 유지용) |
+| 이벤트 이름                 | 발생 시점         | payload                                                    |
+|------------------------|---------------|------------------------------------------------------------|
+| `connect`              | 구독 시작 시 1회    | 단순 텍스트 (`"Connected to progress stream for job: {jobId}"`) |
+| `progress`             | 진행 단계가 바뀔 때마다 | `OcrProgressResponse` (아래)                                 |
+| (comment) `keep-alive` | 15초마다         | SSE 주석(named event 아님, 연결 유지용)                             |
 
 이미 종료된 작업을 구독하면 `connect` 직후 최종 `progress` 이벤트 하나를 보내고 스트림을 닫습니다.
 진행 중인 작업이면 마지막으로 발행된 단계를 먼저 한 번 보내 줍니다.
@@ -79,13 +79,13 @@ Base path: `/api/v1/ocr`
 
 ### `PipelineStep` 값 목록
 
-| 값 | 기본 메시지 | 기본 progress(%) | 발행 시점 |
-| --- | --- | --- | --- |
-| `ACCEPTED` | 작업이 대기열에 등록되었습니다. | 5 | 업로드 직후 |
-| `ANALYZING` | 복약 안내서를 분석하고 있습니다. | 30 | n8n이 요청을 받은 직후 |
-| `COMPLETED` | 분석이 완료되었습니다. | 100 | 성공 콜백 수신 |
-| `FAILED` | 분석에 실패하였습니다. | 100 | n8n 전송 실패, 실패 콜백 수신, 처리 시간 초과 |
-| `CANCELLED` | 작업이 취소되었습니다. | 100 | 취소 요청 처리 |
+| 값           | 기본 메시지             | 기본 progress(%) | 발행 시점                         |
+|-------------|--------------------|----------------|-------------------------------|
+| `ACCEPTED`  | 작업이 대기열에 등록되었습니다.  | 5              | 업로드 직후                        |
+| `ANALYZING` | 복약 안내서를 분석하고 있습니다. | 30             | n8n이 요청을 받은 직후                |
+| `COMPLETED` | 분석이 완료되었습니다.       | 100            | 성공 콜백 수신                      |
+| `FAILED`    | 분석에 실패하였습니다.       | 100            | n8n 전송 실패, 실패 콜백 수신, 처리 시간 초과 |
+| `CANCELLED` | 작업이 취소되었습니다.       | 100            | 취소 요청 처리                      |
 
 서버는 n8n 워크플로우 내부의 세부 진행 상황을 알 수 없습니다. `ANALYZING` 동안에는 `progress`
 숫자 대신 무한 진행 표시(indeterminate)를 쓰는 것을 권장합니다.
@@ -95,21 +95,24 @@ Base path: `/api/v1/ocr`
 `POST /enqueue`에 `fcmToken`을 전달한 경우, 작업 완료/실패 시 FCM data 메시지를 보냅니다.
 취소한 작업에는 알림을 보내지 않습니다.
 
-| status | data 키 | 설명 |
-| --- | --- | --- |
-| `COMPLETED` | `jobId`, `status="COMPLETED"`, `message` | 완료 메시지 |
-| `FAILED` | `jobId`, `status="FAILED"`, `errorCode`, `message` | 아래 `errorCode` 참고 |
+| status      | data 키                                             | 설명                |
+|-------------|----------------------------------------------------|-------------------|
+| `COMPLETED` | `jobId`, `status="COMPLETED"`, `message`           | 완료 메시지            |
+| `FAILED`    | `jobId`, `status="FAILED"`, `errorCode`, `message` | 아래 `errorCode` 참고 |
 
-| errorCode | 원인 |
-| --- | --- |
-| `N8N_DISPATCH_FAILED` | 서버가 n8n으로 요청을 보내지 못함(연결 실패, n8n이 요청 거부 등) |
-| `N8N_PROCESSING_FAILED` | n8n 워크플로우가 분석에 실패했다고 콜백으로 알림 |
+| errorCode                | 원인                                                               |
+|--------------------------|------------------------------------------------------------------|
+| `N8N_DISPATCH_FAILED`    | 서버가 n8n으로 요청을 보내지 못함(연결 실패, n8n이 요청 거부 등)                        |
+| `N8N_PROCESSING_FAILED`  | n8n 워크플로우가 분석에 실패했다고 콜백으로 알림                                     |
 | `OCR_PROCESSING_TIMEOUT` | 처리 시간(`ocr.job-processing-timeout-minutes`, 기본 15분) 안에 콜백이 오지 않음 |
 
 > ⚠️ **클라이언트 구현 시 주의**: 서버는 에러 텍스트를 `"message"` 키로 보냅니다. `"error"`라는
 > 키는 보내지 않습니다.
 
 ## n8n 연동 계약
+
+워크플로우 쪽 설정 방법(에러 출력, 실패 콜백 노드 등)은
+[`yak-allim-infra`의 `n8n/README.md`](https://github.com/koolunkle-yak-allim/yak-allim-infra/blob/main/n8n/README.md)에 있습니다.
 
 ### 서버 → n8n
 
