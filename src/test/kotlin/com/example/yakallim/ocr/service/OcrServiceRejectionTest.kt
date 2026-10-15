@@ -1,13 +1,17 @@
 package com.example.yakallim.ocr.service
 
 import com.example.yakallim.ocr.exception.OcrException
-import com.example.yakallim.ocr.repository.OcrJobRepository
+import com.example.yakallim.ocr.infrastructure.N8nOcrClient
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doThrow
+import org.mockito.kotlin.mock
 import org.springframework.core.task.TaskRejectedException
 import org.springframework.http.HttpStatus
 import org.springframework.mock.web.MockMultipartFile
@@ -25,7 +29,17 @@ class OcrServiceRejectionTest {
     fun cleansUpAndReturns503WhenExecutorRejectsTask() {
         val ocrJobRepository = FakeOcrJobRepository()
         val ocrProgressManager = OcrProgressManager(ocrJobRepository)
-        val service = RejectingOcrService(ocrJobRepository, ocrProgressManager, uploadDir.toString())
+        val rejectingClient = mock<N8nOcrClient> {
+            on { sendToN8nAsync(any(), any(), anyOrNull(), any()) } doThrow TaskRejectedException("executor queue is full")
+        }
+        val service = OcrService(
+            ocrJobRepository = ocrJobRepository,
+            ocrProgressManager = ocrProgressManager,
+            n8nOcrClient = rejectingClient,
+            medicineService = mock(),
+            notifier = NoOpPushNotificationClient(),
+            uploadDirStr = uploadDir.toString()
+        )
         val file = MockMultipartFile("file", "test.jpg", "image/jpeg", "content".toByteArray())
 
         val exception = assertThrows(OcrException.ServiceBusyException::class.java) {
@@ -36,22 +50,6 @@ class OcrServiceRejectionTest {
         assertTrue(ocrJobRepository.failedCalled, "거절된 작업은 updateToFailed가 호출돼야 합니다.")
         Files.newDirectoryStream(uploadDir).use { stream ->
             assertTrue(stream.none(), "거절 시 업로드된 이미지 파일이 정리되지 않았습니다.")
-        }
-    }
-
-    private class RejectingOcrService(
-        ocrJobRepository: OcrJobRepository,
-        ocrProgressManager: OcrProgressManager,
-        uploadDirStr: String
-    ) : OcrService(ocrJobRepository, ocrProgressManager, uploadDirStr) {
-        override fun processJob(
-            jobId: String,
-            targetPath: Path,
-            uniqueFileName: String,
-            fcmToken: String?,
-            delay: Long?
-        ) {
-            throw TaskRejectedException("executor queue is full")
         }
     }
 }

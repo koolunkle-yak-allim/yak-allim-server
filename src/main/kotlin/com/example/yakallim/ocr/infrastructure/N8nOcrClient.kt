@@ -1,4 +1,4 @@
-package com.example.yakallim.ocr.engine
+package com.example.yakallim.ocr.infrastructure
 
 import com.example.yakallim.notification.service.PushNotificationClient
 import com.example.yakallim.ocr.config.OcrProperties
@@ -39,6 +39,8 @@ class N8nOcrClient(
     fun sendToN8nAsync(jobId: String, file: File, fcmToken: String?, onDispatchFailure: (String) -> Unit) {
         runBlocking {
             try {
+                // 콜백이 오지 않을 때 처리 시간 초과(OcrJobCleanupScheduler)가 동작하려면 PROCESSING으로 전이돼야 한다.
+                ocrJobRepository.updateToProcessing(jobId)
                 ocrProgressManager.publishProgress(jobId, PipelineStep.IMAGE_PROCESSING)
 
                 val uri = UriComponentsBuilder.fromUriString(ocrProperties.n8n.webhookUrl)

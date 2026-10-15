@@ -50,7 +50,7 @@ MY_CONTAINER_ID=$(hostname 2>/dev/null || true)
 docker stop "${TARGET_NAME}" 2>/dev/null || true
 docker rm -f "${TARGET_NAME}" 2>/dev/null || true
 
-# 2. 롤백 대상 이미지로 신규(구버전) 컨테이너 생성 — 모델/키는 배포 디렉터리에 남아있는 것을 재사용
+# 2. 롤백 대상 이미지로 신규(구버전) 컨테이너 생성 — 키는 배포 디렉터리에 남아있는 것을 재사용
 docker create \
     --name "${TARGET_NAME}" \
     --restart unless-stopped \
@@ -60,17 +60,10 @@ docker create \
     "${IMAGE_NAME}" \
     --server.port=8081 \
     --notification.firebase.key-path="file:/app/yak-allim-firebase-key.json" \
-    --ocr.engine.onnx.detection-model-path="file:/app/models/ch_PP-OCRv4_det_infer.onnx" \
-    --ocr.engine.onnx.recognition-model-path="file:/app/models/korean_PP-OCRv4_rec_infer.onnx" \
-    --ocr.engine.onnx.recognition-dictionary-path="file:/app/models/korean_dict.txt" \
     --ocr.n8n.webhook-url="${N8N_WEBHOOK_URL}"
 
 if [ -f "${DEPLOY_DIR}/yak-allim-firebase-key.json" ]; then
     docker cp "${DEPLOY_DIR}/yak-allim-firebase-key.json" "${TARGET_NAME}:/app/yak-allim-firebase-key.json"
-fi
-
-if [ -d "${DEPLOY_DIR}/models" ]; then
-    docker cp "${DEPLOY_DIR}/models" "${TARGET_NAME}:/app/"
 fi
 
 docker start "${TARGET_NAME}"

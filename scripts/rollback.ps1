@@ -54,7 +54,7 @@ docker stop $targetName
 docker rm -f $targetName
 $ErrorActionPreference = 'Stop'
 
-# 2. 롤백 대상 이미지로 신규(구버전) 컨테이너 생성 — 모델/키는 배포 디렉터리에 남아있는 것을 재사용
+# 2. 롤백 대상 이미지로 신규(구버전) 컨테이너 생성 — 키는 배포 디렉터리에 남아있는 것을 재사용
 docker create `
     --name $targetName `
     --restart unless-stopped `
@@ -64,19 +64,11 @@ docker create `
     $imageName `
     --server.port=8081 `
     --notification.firebase.key-path="file:/app/yak-allim-firebase-key.json" `
-    --ocr.engine.onnx.detection-model-path="file:/app/models/ch_PP-OCRv4_det_infer.onnx" `
-    --ocr.engine.onnx.recognition-model-path="file:/app/models/korean_PP-OCRv4_rec_infer.onnx" `
-    --ocr.engine.onnx.recognition-dictionary-path="file:/app/models/korean_dict.txt" `
     --ocr.n8n.webhook-url="$n8nWebhookUrl"
 
 $firebaseKeyPath = "$deployDir\yak-allim-firebase-key.json"
 if (Test-Path $firebaseKeyPath) {
     docker cp $firebaseKeyPath "${targetName}:/app/yak-allim-firebase-key.json"
-}
-
-$modelsDir = "$deployDir\models"
-if (Test-Path $modelsDir) {
-    docker cp "$modelsDir" "${targetName}:/app/"
 }
 
 docker start $targetName

@@ -20,7 +20,6 @@ repositories {
     mavenCentral()
 }
 
-val onnxruntimeVersion: String by project
 val firebaseAdminVersion: String by project
 val guavaVersion: String by project
 val protobufVersion: String by project
@@ -39,7 +38,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core")
 
     implementation("com.google.firebase:firebase-admin:$firebaseAdminVersion")
-    implementation("com.microsoft.onnxruntime:onnxruntime:$onnxruntimeVersion")
 
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:$springdocVersion")
 

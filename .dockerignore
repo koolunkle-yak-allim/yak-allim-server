@@ -1,7 +1,6 @@
 .git
 .gradle
 deploy
-models
 .idea
 *.log
 !build/libs/*.jar

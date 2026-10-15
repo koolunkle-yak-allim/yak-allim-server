@@ -5,7 +5,6 @@ import com.example.yakallim.ocr.dto.N8nCallbackRequest
 import com.example.yakallim.ocr.dto.OcrJobResponse
 import com.example.yakallim.ocr.dto.OcrProgressResponse
 import com.example.yakallim.ocr.exception.OcrException
-import com.example.yakallim.ocr.service.N8nOcrService
 import com.example.yakallim.ocr.service.OcrProgressManager
 import com.example.yakallim.ocr.service.OcrService
 import io.swagger.v3.oas.annotations.Operation
@@ -16,7 +15,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses
 import jakarta.servlet.http.HttpServletResponse
 import jakarta.validation.Valid
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.ObjectProvider
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
@@ -30,7 +28,6 @@ import java.security.MessageDigest
 class OcrController(
     private val ocrService: OcrService,
     private val ocrProgressManager: OcrProgressManager,
-    private val n8nOcrServiceProvider: ObjectProvider<N8nOcrService>,
     private val ocrProperties: OcrProperties
 ) {
     private val log = LoggerFactory.getLogger(OcrController::class.java)
@@ -38,10 +35,9 @@ class OcrController(
     @PostMapping("/enqueue", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
     fun enqueueJob(
         @RequestParam("file") file: MultipartFile,
-        @RequestParam("fcmToken", required = false) fcmToken: String?,
-        @RequestParam("delay", required = false) delay: Long?
+        @RequestParam("fcmToken", required = false) fcmToken: String?
     ): ResponseEntity<OcrJobResponse> {
-        val job = ocrService.enqueueJob(file, fcmToken, delay)
+        val job = ocrService.enqueueJob(file, fcmToken)
         return ResponseEntity.accepted().body(job)
     }
 
@@ -101,9 +97,7 @@ class OcrController(
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).build()
         }
 
-        val n8nOcrService = (ocrService as? N8nOcrService) ?: n8nOcrServiceProvider.ifAvailable
-            ?: throw OcrException.IllegalJobStateException("n8n OCR 서비스가 활성화되어 있지 않습니다. 'ocr.type' 속성을 확인해주세요.")
-        n8nOcrService.handleCallback(jobId, request.data.medicines)
+        ocrService.handleCallback(jobId, request.data.medicines)
         return ResponseEntity.ok().build()
     }
 }

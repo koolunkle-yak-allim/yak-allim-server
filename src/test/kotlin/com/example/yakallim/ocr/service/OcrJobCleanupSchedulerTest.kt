@@ -10,8 +10,6 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
-import org.mockito.kotlin.whenever
-import org.springframework.beans.factory.ObjectProvider
 import java.time.Duration
 import java.time.Instant
 
@@ -20,20 +18,20 @@ class OcrJobCleanupSchedulerTest {
     private lateinit var clock: MutableClock
     private lateinit var ocrJobRepository: InMemoryOcrJobRepository
     private lateinit var ocrProgressManager: OcrProgressManager
-    private lateinit var n8nOcrServiceProvider: ObjectProvider<N8nOcrService>
+    private lateinit var ocrService: OcrService
 
     @BeforeEach
     fun setUp() {
         clock = MutableClock(Instant.parse("2026-01-01T00:00:00Z"))
         ocrJobRepository = InMemoryOcrJobRepository(clock)
         ocrProgressManager = OcrProgressManager(ocrJobRepository)
-        n8nOcrServiceProvider = mock()
+        ocrService = mock()
     }
 
     private fun buildScheduler(retentionMinutes: Long = 60, timeoutMinutes: Long = 15) = OcrJobCleanupScheduler(
         ocrJobRepository = ocrJobRepository,
         ocrProgressManager = ocrProgressManager,
-        n8nOcrServiceProvider = n8nOcrServiceProvider,
+        ocrService = ocrService,
         clock = clock,
         retentionMinutes = retentionMinutes,
         processingTimeoutMinutes = timeoutMinutes
@@ -90,17 +88,14 @@ class OcrJobCleanupSchedulerTest {
     }
 
     @Test
-    @DisplayName("n8n 모드에서는 타임아웃 시 N8nOcrService에 정리를 위임한다")
-    fun delegatesTimeoutCleanupToN8nServiceWhenAvailable() {
-        val n8nOcrService = mock<N8nOcrService>()
-        whenever(n8nOcrServiceProvider.ifAvailable).thenReturn(n8nOcrService)
-
+    @DisplayName("타임아웃 시 OcrService에 FCM 토큰 정리를 위임한다")
+    fun delegatesTimeoutCleanupToOcrService() {
         ocrJobRepository.registerJob("job-1")
         ocrJobRepository.updateToProcessing("job-1")
         clock.advanceBy(Duration.ofMinutes(16))
 
         buildScheduler(timeoutMinutes = 15).cleanup()
 
-        verify(n8nOcrService).handleTimeout("job-1", "처리 시간이 초과되었습니다.")
+        verify(ocrService).handleTimeout("job-1", "처리 시간이 초과되었습니다.")
     }
 }
