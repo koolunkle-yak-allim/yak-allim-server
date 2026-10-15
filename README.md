@@ -11,7 +11,6 @@
 ## Features
 
 - **n8n Workflow Integration**: 업로드된 이미지를 n8n Webhook으로 전달하고, n8n 워크플로우가 외부 OCR API와 LLM으로 추출한 복약 정보를 콜백(`POST /api/v1/ocr/n8n/callback/{jobId}`)으로 받습니다. 양방향 요청은 공유 secret으로 인증합니다.
-- **Medicine Name Normalization**: 자모 분해 및 Levenshtein Distance(편집 거리) 알고리즘을 적용하여, n8n이 넘긴 약품명을 로컬 의약품 사전 데이터와 비교 분석하고 유사한 명칭으로 정규화합니다.
 - **Asynchronous Job Management**: 요청 수신 시 작업 ID와 함께 Accepted(202)를 즉시 반환하고, 작업 상태 조회·취소·처리 시간 초과·SSE 진행률 스트림을 제공합니다.
 - **FCM Notification**: 분석 작업이 완료되거나 실패했을 때 Firebase Cloud Messaging(FCM)을 통해 클라이언트에 알림을 전송합니다.
 
@@ -21,7 +20,6 @@
 
 - **Framework**: Spring Boot 3.5.15
 - **Language**: Kotlin 2.0.21 (Coroutines)
-- **Database**: H2 Database (In-Memory), Spring Data JPA
 - **Libraries**:
   - Firebase Admin SDK 9.2.0
   - Ktor Client (n8n Webhook 비동기 HTTP 통신)
@@ -33,7 +31,7 @@
 
 ## Project Structure
 
-패키지를 레이어가 아닌 **기능(도메인) 단위**로 우선 분리하고(`medicine`/`notification`/`ocr`), 각 기능 패키지 내부는 Spring의 통상적인 계층(`controller`/`service`/`repository`/`config` 등)으로 나눴습니다.
+패키지를 레이어가 아닌 **기능(도메인) 단위**로 우선 분리하고(`notification`/`ocr`), 각 기능 패키지 내부는 Spring의 통상적인 계층(`controller`/`service`/`repository`/`config` 등)으로 나눴습니다.
 
 ### Package Structure
 
@@ -41,14 +39,7 @@
 com.example.yakallim
 ├── global                 # 공통 전역 처리
 │   ├── config             # Swagger / OpenApi, CORS 등 전역 설정
-│   ├── exception          # 전역 예외 처리(@RestControllerAdvice) 및 공통 ErrorResponse
-│   └── utils              # 한글 자모 분해 등 유틸리티
-├── medicine                # 의약품 사전 데이터 관리
-│   ├── config              # 매칭 규칙 관련 설정 프로퍼티
-│   ├── initializer         # CSV 사전 데이터 초기 적재
-│   ├── model                # 의약품 도메인 모델
-│   ├── repository          # 의약품 Repository
-│   └── service              # 약품명 정규화(오타 교정) 서비스
+│   └── exception          # 전역 예외 처리(@RestControllerAdvice) 및 공통 ErrorResponse
 ├── notification            # 알림 발송
 │   ├── config              # FCM 설정
 │   ├── infrastructure      # Firebase FCM 구현체
@@ -73,7 +64,6 @@ API 엔드포인트·SSE 이벤트·FCM 페이로드 등 서버-클라이언트 
 ### Prerequisites
 
 - **JDK**: Java 17
-- **Database**: H2 (In-memory 실행)
 - **External Keys**: Firebase Admin SDK 비공개 키 JSON 파일 (`yak-allim-firebase-key.json`)
 
 ### Configuration
@@ -88,9 +78,6 @@ API 엔드포인트·SSE 이벤트·FCM 페이로드 등 서버-클라이언트 
    `OCR_N8N_WEBHOOK_SECRET` 환경 변수가 반드시 필요합니다(비어 있으면 기동에 실패합니다).
    이 값은 서버 → n8n 요청에는 `X-N8N-WEBHOOK-SECRET` 헤더로, n8n → 서버 콜백에는 `X-N8N-Secret` 헤더로
    전달됩니다(양방향 헤더 이름이 다르니 n8n 워크플로우 설정 시 유의하세요).
-
-3. `src/main/resources/data/` 경로에 의약품 사전 데이터가 존재하는지 확인합니다.
-   - `medicines.csv`: 현재 6건의 예시 데이터만 포함된 테스트용 사전입니다(공식 의약품 데이터 출처 아님). 실제 서비스에 쓰려면 [식품의약품안전처 의약품안전나라](https://nedrug.mfds.go.kr) 등 공신력 있는 출처의 데이터로 교체하고 출처·라이선스를 이 문서에 명시해야 합니다.
 
 ### Installation & Build
 
@@ -113,7 +100,7 @@ API 엔드포인트·SSE 이벤트·FCM 페이로드 등 서버-클라이언트 
 
 현재 알려진 제약사항입니다. 각 항목은 순차적으로 개선할 계획입니다.
 
-- **의약품 사전 규모**: `medicines.csv`가 6건뿐인 테스트용 데이터라, 사전에 없는 약품명이 엉뚱한 이름으로 교정될 수 있습니다.
+- **약품명 검증 없음**: 서버는 LLM이 추출한 약품명을 교정하거나 공식 의약품 데이터와 대조하지 않고 그대로 전달합니다. 클라이언트에서 원본 사진과 함께 보여주고 사용자가 확인하도록 안내해야 합니다.
 - **작업 상태 영속성 없음**: 작업 상태가 메모리(`ConcurrentHashMap`)에만 저장되어 서버 재시작 시 모두 사라지고, 재시작 전에 보낸 요청의 n8n 콜백은 받을 곳이 없어집니다. n8n 콜백이 오지 않으면 처리 시간 초과(`ocr.job-processing-timeout-minutes`, 기본 15분) 시 자동으로 `FAILED` 처리됩니다.
 - **n8n 의존성**: 분석 전체가 n8n 워크플로우와 그 뒤의 외부 OCR API·LLM에 의존합니다. n8n 워크플로우가 실패 콜백을 보내지 못하고 멈추면, 서버는 이를 처리 시간 초과로만 감지합니다. 처방전 이미지가 외부 서비스로 전송된다는 점도 유의해야 합니다.
 - **세부 진행률 없음**: 서버는 n8n 내부의 단계별 진행 상황을 알 수 없어, 분석 중에는 `ANALYZING` 단계 하나로만 표시합니다.
