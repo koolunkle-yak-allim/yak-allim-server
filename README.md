@@ -55,7 +55,8 @@ com.example.yakallim
     └── service             # 작업 접수·콜백 처리, 진행률 SSE, 정리 스케줄러
 ```
 
-API 엔드포인트·SSE 이벤트·FCM 페이로드 등 서버-클라이언트 계약은 [`docs/api-contract.md`](docs/api-contract.md)에 별도로 정리되어 있습니다.
+API 엔드포인트·SSE 이벤트·FCM 페이로드·n8n 콜백 등 서버-클라이언트 계약은 [`docs/api-contract.md`](docs/api-contract.md)에 별도로 정리되어 있습니다.
+n8n 워크플로우와 실패 콜백 설정 방법은 [`yak-allim-infra`의 `n8n/README.md`](https://github.com/koolunkle-yak-allim/yak-allim-infra/blob/main/n8n/README.md)를 참고하세요.
 
 ---
 
