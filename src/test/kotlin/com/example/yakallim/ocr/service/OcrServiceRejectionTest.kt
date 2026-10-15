@@ -36,7 +36,6 @@ class OcrServiceRejectionTest {
             ocrJobRepository = ocrJobRepository,
             ocrProgressManager = ocrProgressManager,
             n8nOcrClient = rejectingClient,
-            medicineService = mock(),
             notifier = NoOpPushNotificationClient(),
             uploadDirStr = uploadDir.toString()
         )

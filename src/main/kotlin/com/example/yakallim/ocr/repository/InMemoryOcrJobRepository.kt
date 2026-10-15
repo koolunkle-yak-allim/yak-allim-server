@@ -23,31 +23,17 @@ class InMemoryOcrJobRepository(
         return response
     }
 
-    override fun updateToProcessing(jobId: String) {
-        updateJobStatus(jobId, JobStatus.PROCESSING)
-    }
+    override fun updateToProcessing(jobId: String): Boolean =
+        transitionIfActive(jobId) { it.copy(status = JobStatus.PROCESSING) }
 
-    override fun updateToCompleted(jobId: String, result: OcrResponse): Boolean {
-        var transitionApplied = false
-        jobRegistry.computeIfPresent(jobId) { _, existing ->
-            if (existing.response.status == JobStatus.ACCEPTED || existing.response.status == JobStatus.PROCESSING) {
-                transitionApplied = true
-                JobRecord(existing.response.copy(status = JobStatus.COMPLETED, result = result), clock.instant())
-            } else {
-                transitionApplied = false
-                existing
-            }
-        }
-        return transitionApplied
-    }
+    override fun updateToCompleted(jobId: String, result: OcrResponse): Boolean =
+        transitionIfActive(jobId) { it.copy(status = JobStatus.COMPLETED, result = result) }
 
-    override fun updateToFailed(jobId: String, errorMessage: String) {
-        updateJobStatus(jobId, JobStatus.FAILED, error = errorMessage)
-    }
+    override fun updateToFailed(jobId: String, errorMessage: String): Boolean =
+        transitionIfActive(jobId) { it.copy(status = JobStatus.FAILED, error = errorMessage) }
 
-    override fun updateToCancelled(jobId: String) {
-        updateJobStatus(jobId, JobStatus.CANCELLED)
-    }
+    override fun updateToCancelled(jobId: String): Boolean =
+        transitionIfActive(jobId) { it.copy(status = JobStatus.CANCELLED) }
 
     override fun getJob(jobId: String): OcrJobResponse? = jobRegistry[jobId]?.response
 
@@ -63,21 +49,21 @@ class InMemoryOcrJobRepository(
         jobRegistry.remove(jobId)
     }
 
-    private fun updateJobStatus(
-        jobId: String, status: JobStatus, result: OcrResponse? = null, error: String? = null
-    ): Boolean {
+    /** 진행 중인 작업에만 [transform]을 적용한다. 종료된 작업(COMPLETED/FAILED/CANCELLED)은 그대로 둔다. */
+    private fun transitionIfActive(jobId: String, transform: (OcrJobResponse) -> OcrJobResponse): Boolean {
         var transitionApplied = false
-        jobRegistry.compute(jobId) { _, existing ->
-            if (existing?.response?.status == JobStatus.CANCELLED && status != JobStatus.CANCELLED) {
-                transitionApplied = false
-                return@compute existing
+        jobRegistry.computeIfPresent(jobId) { _, existing ->
+            if (existing.response.status in ACTIVE_STATUSES) {
+                transitionApplied = true
+                JobRecord(transform(existing.response), clock.instant())
+            } else {
+                existing
             }
-            transitionApplied = true
-            val updatedResponse = existing?.response?.copy(
-                status = status, result = result ?: existing.response.result, error = error
-            ) ?: OcrJobResponse(jobId = jobId, status = status, result = result, error = error)
-            JobRecord(updatedResponse, clock.instant())
         }
         return transitionApplied
+    }
+
+    companion object {
+        private val ACTIVE_STATUSES = setOf(JobStatus.ACCEPTED, JobStatus.PROCESSING)
     }
 }

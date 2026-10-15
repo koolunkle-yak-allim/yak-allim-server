@@ -97,7 +97,7 @@ class OcrController(
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).build()
         }
 
-        ocrService.handleCallback(jobId, request.data.medicines)
+        ocrService.handleCallback(request)
         return ResponseEntity.ok().build()
     }
 }

@@ -60,14 +60,12 @@ class OcrProgressManager(
         ) {
             val step = when (job.status) {
                 JobStatus.COMPLETED -> PipelineStep.COMPLETED
-                JobStatus.FAILED -> PipelineStep.FAILED
-                JobStatus.CANCELLED -> PipelineStep.FAILED
+                JobStatus.CANCELLED -> PipelineStep.CANCELLED
                 else -> PipelineStep.FAILED
             }
             val message = when (job.status) {
                 JobStatus.COMPLETED -> job.result?.message ?: step.defaultMessage
                 JobStatus.FAILED -> job.error ?: step.defaultMessage
-                JobStatus.CANCELLED -> "작업이 취소되었습니다."
                 else -> step.defaultMessage
             }
             val payload = OcrProgressResponse(
@@ -138,7 +136,7 @@ class OcrProgressManager(
     fun publishProgress(jobId: String, step: PipelineStep, message: String? = null, progress: Int? = null) {
         val finalMessage = message ?: step.defaultMessage
         val finalProgress = progress ?: step.defaultProgress
-        val isFinished = step == PipelineStep.COMPLETED || step == PipelineStep.FAILED
+        val isFinished = step.isFinished
 
         val payload = OcrProgressResponse(
             step = step,

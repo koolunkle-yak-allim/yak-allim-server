@@ -39,16 +39,19 @@ class N8nOcrClient(
     fun sendToN8nAsync(jobId: String, file: File, fcmToken: String?, onDispatchFailure: (String) -> Unit) {
         runBlocking {
             try {
+                // 대기열에 있는 동안 취소된 작업은 외부 OCR·LLM 비용이 들지 않도록 전송하지 않는다.
+                if (ocrJobRepository.isCancelled(jobId)) {
+                    log.info("Skipping n8n dispatch for cancelled job: jobId='{}'", jobId)
+                    return@runBlocking
+                }
+
                 // 콜백이 오지 않을 때 처리 시간 초과(OcrJobCleanupScheduler)가 동작하려면 PROCESSING으로 전이돼야 한다.
                 ocrJobRepository.updateToProcessing(jobId)
-                ocrProgressManager.publishProgress(jobId, PipelineStep.IMAGE_PROCESSING)
 
                 val uri = UriComponentsBuilder.fromUriString(ocrProperties.n8n.webhookUrl)
                     .queryParam("jobId", jobId)
                     .build()
                     .toUriString()
-
-                ocrProgressManager.publishProgress(jobId, PipelineStep.TEXT_DETECTION)
 
                 val response = httpClient.post(uri) {
                     if (ocrProperties.n8n.webhookSecret.isNotBlank()) {
@@ -76,15 +79,16 @@ class N8nOcrClient(
                     error("n8n webhook 요청이 거부되었습니다: HTTP ${response.status.value} ${response.bodyAsText().take(200)}")
                 }
 
-                ocrProgressManager.publishProgress(jobId, PipelineStep.TEXT_RECOGNITION)
+                ocrProgressManager.publishProgress(jobId, PipelineStep.ANALYZING)
             } catch (e: Exception) {
-                log.error("Failed to send image to n8n", e)
-                val rawErrorMessage = e.message ?: "Failed to connect to n8n"
+                log.error("Failed to send image to n8n: jobId='{}'", jobId, e)
                 val userFacingMessage = OcrErrorMessageResolver.resolve(e)
-                ocrJobRepository.updateToFailed(jobId, rawErrorMessage)
-                ocrProgressManager.publishProgress(jobId, PipelineStep.FAILED, userFacingMessage)
+                val transitionApplied = ocrJobRepository.updateToFailed(jobId, userFacingMessage)
 
                 onDispatchFailure(jobId)
+
+                if (!transitionApplied) return@runBlocking
+                ocrProgressManager.publishProgress(jobId, PipelineStep.FAILED, userFacingMessage)
 
                 if (!fcmToken.isNullOrEmpty()) {
                     notifier.notify(

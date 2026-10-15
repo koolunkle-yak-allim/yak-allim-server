@@ -2,6 +2,7 @@ package com.example.yakallim.ocr.repository
 
 import com.example.yakallim.ocr.model.JobStatus
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -73,5 +74,23 @@ class InMemoryOcrJobRepositoryTest {
 
         assertTrue(staleAccepted.isEmpty())
         assertTrue(staleProcessing.isEmpty())
+    }
+
+    @Test
+    @DisplayName("종료된 작업은 다른 상태로 덮어쓰이지 않는다")
+    fun finishedJobIsNotOverwritten() {
+        repository.registerJob("job-1")
+        repository.updateToCancelled("job-1")
+
+        assertFalse(repository.updateToFailed("job-1", "시간 초과"))
+        assertFalse(repository.updateToProcessing("job-1"))
+        assertEquals(JobStatus.CANCELLED, repository.getJob("job-1")?.status)
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 작업에 대한 전이는 새 레코드를 만들지 않는다")
+    fun transitionOnMissingJobDoesNothing() {
+        assertFalse(repository.updateToFailed("missing", "오류"))
+        assertNull(repository.getJob("missing"))
     }
 }

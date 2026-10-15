@@ -45,7 +45,8 @@ class OcrJobCleanupScheduler(
         val timedOutJobIds = ocrJobRepository.findJobIdsInStatusUpdatedBefore(setOf(JobStatus.PROCESSING), cutoff)
 
         timedOutJobIds.forEach { jobId ->
-            ocrJobRepository.updateToFailed(jobId, PROCESSING_TIMEOUT_MESSAGE)
+            // 조회와 전이 사이에 콜백이 도착했을 수 있으므로, 실제로 FAILED로 전이된 경우에만 알린다.
+            if (!ocrJobRepository.updateToFailed(jobId, PROCESSING_TIMEOUT_MESSAGE)) return@forEach
             ocrProgressManager.publishProgress(jobId, PipelineStep.FAILED, PROCESSING_TIMEOUT_MESSAGE)
             ocrService.handleTimeout(jobId, PROCESSING_TIMEOUT_MESSAGE)
             log.warn("OCR job marked FAILED due to processing timeout: jobId='{}'", jobId)

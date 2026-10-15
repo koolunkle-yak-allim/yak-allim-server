@@ -59,6 +59,6 @@ class OcrWebhookSecretTest {
         val response = controller.callback("job-1", request("job-1"), webhookSecret = "correct-secret")
 
         assertEquals(HttpStatus.OK, response.statusCode)
-        verify(ocrService).handleCallback("job-1", emptyList())
+        verify(ocrService).handleCallback(request("job-1"))
     }
 }
