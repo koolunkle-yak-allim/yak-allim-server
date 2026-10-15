@@ -7,28 +7,19 @@ import com.example.yakallim.ocr.model.JobStatus
 import com.example.yakallim.ocr.repository.OcrJobRepository
 
 internal class FakeOcrJobRepository : OcrJobRepository {
-    var cancelled = false
     var failedCalled = false
-    var cancelledLoggedAsFailure = false
-    var lastFailureReason: String? = null
-    var registeredJobId: String? = null
 
-    override fun registerJob(jobId: String): OcrJobResponse {
-        registeredJobId = jobId
-        return OcrJobResponse(jobId = jobId, status = JobStatus.ACCEPTED)
-    }
-
-    override fun updateToProcessing(jobId: String) {}
+    override fun registerJob(jobId: String): OcrJobResponse = OcrJobResponse(jobId = jobId, status = JobStatus.ACCEPTED)
+    override fun updateToProcessing(jobId: String): Boolean = true
     override fun updateToCompleted(jobId: String, result: OcrResponse): Boolean = true
-    override fun updateToFailed(jobId: String, errorMessage: String) {
+    override fun updateToFailed(jobId: String, errorMessage: String): Boolean {
         failedCalled = true
-        lastFailureReason = errorMessage
-        if (errorMessage.contains("취소")) cancelledLoggedAsFailure = true
+        return true
     }
 
-    override fun updateToCancelled(jobId: String) {}
+    override fun updateToCancelled(jobId: String): Boolean = true
     override fun getJob(jobId: String): OcrJobResponse? = null
-    override fun isCancelled(jobId: String): Boolean = cancelled
+    override fun isCancelled(jobId: String): Boolean = false
 }
 
 internal class NoOpPushNotificationClient : PushNotificationClient {

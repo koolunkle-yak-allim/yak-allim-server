@@ -1,12 +1,11 @@
 package com.example.yakallim.ocr.service
 
-import com.example.yakallim.medicine.service.MedicineService
 import com.example.yakallim.notification.service.PushNotificationClient
+import com.example.yakallim.ocr.dto.N8nCallbackRequest
 import com.example.yakallim.ocr.dto.OcrJobResponse
 import com.example.yakallim.ocr.dto.OcrResponse
 import com.example.yakallim.ocr.exception.OcrException
 import com.example.yakallim.ocr.infrastructure.N8nOcrClient
-import com.example.yakallim.ocr.model.JobStatus
 import com.example.yakallim.ocr.model.PipelineStep
 import com.example.yakallim.ocr.model.PrescribedMedicine
 import com.example.yakallim.ocr.repository.OcrJobRepository
@@ -30,7 +29,6 @@ class OcrService(
     private val ocrJobRepository: OcrJobRepository,
     private val ocrProgressManager: OcrProgressManager,
     private val n8nOcrClient: N8nOcrClient,
-    private val medicineService: MedicineService,
     @param:Qualifier("FCM_CLIENT") private val notifier: PushNotificationClient,
     @Value("\${ocr.upload-dir:outputs/api-images}") uploadDirStr: String
 ) {
@@ -111,12 +109,13 @@ class OcrService(
         val job = ocrJobRepository.getJob(jobId)
             ?: throw OcrException.JobNotFoundException("존재하지 않는 작업ID: $jobId")
 
-        if (job.status == JobStatus.COMPLETED || job.status == JobStatus.FAILED) {
+        if (!ocrJobRepository.updateToCancelled(jobId)) {
             throw OcrException.IllegalJobStateException("이미 종료된 작업은 취소할 수 없습니다. (작업ID: $jobId, 상태: ${job.status})")
         }
 
-        ocrJobRepository.updateToCancelled(jobId)
-        log.info("OCR job cancellation requested: jobId='{}' (previous status: {})", jobId, job.status)
+        fcmTokenMap.remove(jobId)
+        ocrProgressManager.publishProgress(jobId, PipelineStep.CANCELLED)
+        log.info("OCR job cancelled: jobId='{}' (previous status: {})", jobId, job.status)
     }
 
     /** PROCESSING 타임아웃으로 강제 종료될 때 호출된다. 남아있는 FCM 토큰을 정리하고, 있으면 실패 알림을 보낸다. */
@@ -135,44 +134,72 @@ class OcrService(
         )
     }
 
-    /** n8n이 넘긴 약품명을 서버 의약품 사전으로 표준화한다. */
-    private fun normalizeMedicineNames(medicines: List<PrescribedMedicine>): List<PrescribedMedicine> =
-        medicines.map { medicine ->
-            val standardName = medicineService.findStandardName(medicine.medicineName)
-            medicine.copy(
-                medicineName = standardName,
-                rawName = medicine.medicineName,
-                autoCorrected = standardName != medicine.medicineName
-            )
+    fun handleCallback(request: N8nCallbackRequest) {
+        val jobId = requireNotNull(request.jobId)
+        if (request.isFailure) {
+            handleFailure(jobId, request.error)
+        } else {
+            handleSuccess(jobId, request.data.medicines)
         }
+    }
 
-    fun handleCallback(jobId: String, medicines: List<PrescribedMedicine>) {
+    private fun handleSuccess(jobId: String, medicines: List<PrescribedMedicine>) {
         val response = OcrResponse(
-            fileName = "n8n_ocr_$jobId",
-            message = "복약 안내서 분석이 완료되었습니다.\n복약 지침을 확인해 보세요.",
-            textBlocks = emptyList(),
-            medicines = normalizeMedicineNames(medicines)
+            message = COMPLETED_MESSAGE,
+            medicines = medicines
+                .map { it.copy(medicineName = it.medicineName.trim()) }
+                .filter { it.medicineName.isNotEmpty() }
         )
 
         val transitionApplied = ocrJobRepository.updateToCompleted(jobId, response)
-
         val token = fcmTokenMap.remove(jobId)
 
-        if (transitionApplied) {
-            ocrProgressManager.publishProgress(jobId, PipelineStep.COMPLETED, response.message)
+        if (!transitionApplied) {
+            log.info("Ignoring n8n callback for job that is no longer active: jobId='{}'", jobId)
+            return
+        }
 
-            if (!token.isNullOrEmpty()) {
-                notifier.notify(
-                    token = token,
-                    title = "복약 안내서 분석 완료",
-                    body = response.message,
-                    data = mapOf("jobId" to jobId, "status" to "COMPLETED", "message" to response.message)
+        ocrProgressManager.publishProgress(jobId, PipelineStep.COMPLETED, response.message)
+
+        if (!token.isNullOrEmpty()) {
+            notifier.notify(
+                token = token,
+                title = "복약 안내서 분석 완료",
+                body = response.message,
+                data = mapOf("jobId" to jobId, "status" to "COMPLETED", "message" to response.message)
+            )
+        }
+    }
+
+    /** n8n 워크플로우가 분석 실패를 콜백으로 알린 경우. 원인은 로그에만 남기고 사용자에게는 일반 메시지를 보낸다. */
+    private fun handleFailure(jobId: String, reason: String?) {
+        log.warn("n8n reported analysis failure: jobId='{}', reason='{}'", jobId, reason)
+
+        val transitionApplied = ocrJobRepository.updateToFailed(jobId, ANALYSIS_FAILED_MESSAGE)
+        val token = fcmTokenMap.remove(jobId)
+
+        if (!transitionApplied) return
+
+        ocrProgressManager.publishProgress(jobId, PipelineStep.FAILED, ANALYSIS_FAILED_MESSAGE)
+
+        if (!token.isNullOrEmpty()) {
+            notifier.notify(
+                token = token,
+                title = "복약 안내서 분석 실패",
+                body = ANALYSIS_FAILED_MESSAGE,
+                data = mapOf(
+                    "jobId" to jobId,
+                    "status" to "FAILED",
+                    "errorCode" to "N8N_PROCESSING_FAILED",
+                    "message" to ANALYSIS_FAILED_MESSAGE
                 )
-            }
+            )
         }
     }
 
     companion object {
         private val EXTENSION_REGEX = Regex("[^a-zA-Z0-9]")
+        private const val COMPLETED_MESSAGE = "복약 안내서 분석이 완료되었습니다.\n복약 지침을 확인해 보세요."
+        private const val ANALYSIS_FAILED_MESSAGE = "복약 안내서를 분석하지 못했습니다. 사진을 다시 찍어 올려 주세요."
     }
 }

@@ -84,28 +84,40 @@ class OcrControllerTest {
     }
 
     @Test
-    @DisplayName("n8n 콜백 JSON에 rawName/autoCorrected/confidence가 없으면 null로 역직렬화된다")
-    fun shouldDeserializeN8nCallbackWithMissingNewFieldsAsNull() {
-        // 참고: bounds는 Jackson이 이 프로젝트에서 Kotlin 기본값을 적용하지 않아
-        // JSON에 명시하지 않으면 별도로 NPE가 발생한다(X2와 무관한 기존 이슈, 여기서는 우회).
-        val json = """
-            {
-              "jobId": "job-1",
-              "status": "COMPLETED",
-              "data": {
-                "medicines": [
-                  { "medicineName": "타이레놀정", "dosagePerTake": "1정", "dailyFrequency": 3, "durationDays": 3, "bounds": [] }
-                ]
-              }
-            }
+    @DisplayName("n8n 콜백 JSON에서 선택 필드와 data를 생략해도 기본값으로 역직렬화된다")
+    fun shouldDeserializeN8nCallbackWithOmittedOptionalFields() {
+        val successJson = """
+            { "jobId": "job-1", "data": { "medicines": [ { "medicineName": "타이레놀정" } ] } }
         """.trimIndent()
+        val failureJson = """{ "jobId": "job-1", "status": "FAILED" }"""
 
-        val request = objectMapper.readValue(json, N8nCallbackRequest::class.java)
-        val medicine = request.data.medicines.single()
+        val medicine = objectMapper.readValue(successJson, N8nCallbackRequest::class.java).data.medicines.single()
+        val failure = objectMapper.readValue(failureJson, N8nCallbackRequest::class.java)
 
-        Assertions.assertNull(medicine.rawName)
-        Assertions.assertNull(medicine.autoCorrected)
-        Assertions.assertNull(medicine.confidence)
+        Assertions.assertEquals("타이레놀정", medicine.medicineName)
+        Assertions.assertNull(medicine.dosagePerTake)
+        Assertions.assertTrue(failure.isFailure)
+        Assertions.assertTrue(failure.data.medicines.isEmpty())
+    }
+
+    @Test
+    @DisplayName("n8n이 FAILED 상태로 콜백하면 작업이 즉시 FAILED로 전이된다")
+    fun shouldFailJobWhenN8nReportsFailure() {
+        val mockMultipartFile =
+            MockMultipartFile("file", "test.jpg", MediaType.IMAGE_JPEG_VALUE, "test content".toByteArray())
+        val submitResult = mockMvc.perform(
+            MockMvcRequestBuilders.multipart("/api/v1/ocr/enqueue").file(mockMultipartFile)
+        ).andExpect(MockMvcResultMatchers.status().isAccepted).andReturn()
+        val jobId = objectMapper.readValue(submitResult.response.contentAsString, OcrJobResponse::class.java).jobId
+
+        mockMvc.perform(
+            MockMvcRequestBuilders.post("/api/v1/ocr/n8n/callback/$jobId")
+                .header("X-N8N-Secret", "test-secret")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{ "jobId": "$jobId", "status": "FAILED", "error": "LLM timeout" }""")
+        ).andExpect(MockMvcResultMatchers.status().isOk)
+
+        Assertions.assertEquals(JobStatus.FAILED, ocrJobRepository.getJob(jobId)?.status)
     }
 
     @Test
