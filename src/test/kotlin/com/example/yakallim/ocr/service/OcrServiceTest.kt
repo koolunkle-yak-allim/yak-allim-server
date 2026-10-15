@@ -1,99 +1,88 @@
 package com.example.yakallim.ocr.service
 
-import com.example.yakallim.ocr.engine.OcrEngine
-import com.example.yakallim.ocr.parser.PrescriptionParser
-import org.junit.jupiter.api.Assertions
+import com.example.yakallim.medicine.service.MedicineService
+import com.example.yakallim.notification.service.PushNotificationClient
+import com.example.yakallim.ocr.dto.OcrResponse
+import com.example.yakallim.ocr.infrastructure.N8nOcrClient
+import com.example.yakallim.ocr.model.PrescribedMedicine
+import com.example.yakallim.ocr.repository.OcrJobRepository
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.mockito.kotlin.any
+import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.eq
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
-import java.awt.Color
-import java.awt.Font
-import java.awt.image.BufferedImage
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
-import java.io.File
-import javax.imageio.ImageIO
 
+/** S8: n8n 콜백으로 받은 약품명이 서버 사전으로 표준화되는지 검증한다. */
 @SpringBootTest
 class OcrServiceTest {
 
     @Autowired
-    private lateinit var ocrEngine: OcrEngine
+    private lateinit var medicineService: MedicineService
 
-    @Autowired
-    private lateinit var prescriptionParser: PrescriptionParser
+    private fun handleCallbackAndCaptureResponse(
+        jobId: String,
+        medicines: List<PrescribedMedicine>
+    ): OcrResponse {
+        val ocrJobRepository: OcrJobRepository = mock()
+        whenever(ocrJobRepository.updateToCompleted(any(), any())).thenReturn(true)
 
-    @Test
-    @DisplayName("모형 처방전 이미지를 통한 OCR 파싱 흐름을 검증한다")
-    fun shouldParsePrescriptionSuccessfullyUsingMockImage() {
-        val width = 640
-        val height = 240
-        val image = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB).apply {
-            createGraphics().apply {
-                color = Color.WHITE
-                fillRect(0, 0, width, height)
+        val service = OcrService(
+            ocrJobRepository = ocrJobRepository,
+            ocrProgressManager = mock(),
+            n8nOcrClient = mock<N8nOcrClient>(),
+            medicineService = medicineService,
+            notifier = mock<PushNotificationClient>(),
+            uploadDirStr = "outputs/api-images"
+        )
 
-                color = Color.BLACK
-                font = Font("Arial", Font.BOLD, 22)
+        service.handleCallback(jobId, medicines)
 
-                drawString("약품명", 80, 40)
-                drawString("복약안내(투약량/횟수/일수)", 340, 40)
-
-                drawString("타이레놀정 500mg", 80, 100)
-                drawString("1정 / 3회 / 3일", 340, 100)
-
-                drawString("아모디핀정", 80, 160)
-                drawString("1.5정 / 2회 / 7일", 340, 160)
-
-                dispose()
-            }
-        }
-
-        val imageInputStream = ByteArrayOutputStream().use { outputStream ->
-            ImageIO.write(image, "png", outputStream)
-            ByteArrayInputStream(outputStream.toByteArray())
-        }
-
-        val ocrResults = ocrEngine.runOcr(imageInputStream)
-        val instructions = prescriptionParser.parse(ocrResults, width)
-
-        Assertions.assertNotNull(ocrResults)
-        Assertions.assertNotNull(instructions)
+        val captor = argumentCaptor<OcrResponse>()
+        verify(ocrJobRepository).updateToCompleted(eq(jobId), captor.capture())
+        return captor.firstValue
     }
 
     @Test
-    @DisplayName("실제 처방전 이미지 파일 OCR 분석 및 오타 교정을 검증한다")
-    fun shouldProcessRealImageWithOcrAndFuzzyCorrection() {
-        val imageFile = File("outputs/api-images/sample.jpg")
-        if (!imageFile.exists()) return
-        verifyOcrPipeline(imageFile)
+    @DisplayName("사전 항목과 가까운 약품명은 표준명으로 교정되고 원문·교정여부가 채워진다")
+    fun normalizesCallbackMedicineNameUsingServerDictionary() {
+        val medicines = listOf(
+            PrescribedMedicine(
+                medicineName = "이모튼캡",
+                dosagePerTake = "1정",
+                dailyFrequency = 3,
+                durationDays = 3
+            )
+        )
+
+        val normalized = handleCallbackAndCaptureResponse("job-1", medicines).medicines.single()
+
+        assertEquals("이모튼캡슐", normalized.medicineName)
+        assertEquals("이모튼캡", normalized.rawName)
+        assertEquals(true, normalized.autoCorrected)
     }
 
-    private fun verifyOcrPipeline(imageFile: File) {
-        val ocrResults = imageFile.inputStream().use { ocrEngine.runOcr(it) }
-        Assertions.assertNotNull(ocrResults, "${imageFile.name} 파일의 OCR 결과가 존재하지 않습니다.")
+    @Test
+    @DisplayName("사전에 없는 약품명은 원문을 유지하고 autoCorrected가 false다")
+    fun keepsRawNameWhenNotInDictionary() {
+        val medicines = listOf(
+            PrescribedMedicine(
+                medicineName = "테스트약품",
+                dosagePerTake = "1정",
+                dailyFrequency = 3,
+                durationDays = 3
+            )
+        )
 
-        println("=== 이미지 원본 OCR 결과 (${imageFile.name}) ===")
-        ocrResults.forEachIndexed { idx, result ->
-            val box = result.bounds
-            val minX = box.minOfOrNull { it.x } ?: 0
-            val maxX = box.maxOfOrNull { it.x } ?: 0
-            val minY = box.minOfOrNull { it.y } ?: 0
-            val maxY = box.maxOfOrNull { it.y } ?: 0
-            println("[$idx] TEXT: '${result.text}', CONFIDENCE: ${result.confidence}, BOUNDS: [X: $minX~$maxX, Y: $minY~$maxY]")
-        }
-        println("==================================")
+        val normalized = handleCallbackAndCaptureResponse("job-2", medicines).medicines.single()
 
-        val imageWidth = runCatching { ImageIO.read(imageFile)?.width ?: 0 }.getOrDefault(0)
-        val instructions = prescriptionParser.parse(ocrResults, imageWidth)
-        Assertions.assertNotNull(instructions, "${imageFile.name} 파일의 파싱 결과가 존재하지 않습니다.")
-
-        println("=== 이미지 구조화 파싱 결과 (${imageFile.name}) ===")
-        instructions.forEachIndexed { idx, item ->
-            println("[$idx] 약품명: '${item.medicineName}'")
-            println("   1회 복용량: ${item.dosagePerTake}, 하루 횟수: ${item.dailyFrequency}, 복용 기간: ${item.durationDays}")
-        }
-        println("==========================================")
+        assertEquals("테스트약품", normalized.medicineName)
+        assertEquals("테스트약품", normalized.rawName)
+        assertEquals(false, normalized.autoCorrected)
     }
 }

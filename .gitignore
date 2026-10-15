@@ -22,7 +22,7 @@ outputs/
 # -------------------------------------------------------------------------
 # Large Model Assets (Inference Engines)
 # -------------------------------------------------------------------------
-# Large binary ONNX models (e.g., PP-OCRv4 detection/recognition models)
+# Large binary ONNX models (로컬 ONNX OCR은 archive/onnx-local-ocr 브랜치로 이관됨, 실수로 커밋되지 않도록 유지)
 *.onnx
 
 

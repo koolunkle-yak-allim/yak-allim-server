@@ -46,7 +46,7 @@ jobs:
         echo "| **Status** | ${{ job.status }} |" >> $GITHUB_STEP_SUMMARY
         echo "| **Tests** | Executed |" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "> **Note:** All tests were successfully executed using a mock test environment (bypassing external dependencies like heavy ONNX models and Firebase keys)." >> $GITHUB_STEP_SUMMARY
+        echo "> **Note:** All tests were successfully executed using a mock test environment (bypassing external dependencies like the n8n webhook and Firebase keys)." >> $GITHUB_STEP_SUMMARY
 
   trigger-jenkins:
     needs: build

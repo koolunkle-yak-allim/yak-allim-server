@@ -10,7 +10,7 @@ Base path: `/api/v1/ocr`
 
 | Method | Path | 요청 | 응답 | 비고 |
 | --- | --- | --- | --- | --- |
-| POST | `/enqueue` | `multipart/form-data`: `file`(필수), `fcmToken`(선택), `delay`(선택, ms) | `202 Accepted` + `OcrJobResponse` | 작업을 큐에 등록하고 즉시 반환, 처리는 비동기 |
+| POST | `/enqueue` | `multipart/form-data`: `file`(필수), `fcmToken`(선택) | `202 Accepted` + `OcrJobResponse` | 작업을 큐에 등록하고 즉시 반환, 처리는 비동기 |
 | GET | `/jobs/{jobId}` | - | `200 OK` + `OcrJobResponse` / `404 Not Found` | 작업 현재 상태 조회 |
 | GET | `/jobs/{jobId}/progress` | - | `200 OK`, `text/event-stream` | 아래 [SSE 이벤트](#sse-이벤트) 참고 |
 | POST | `/jobs/{jobId}/cancel` | - | `204 No Content` / `404 Not Found` | 진행 중인 작업 취소 요청 |
@@ -61,8 +61,8 @@ Base path: `/api/v1/ocr`
 | `COMPLETED` | 분석이 완료되었습니다. | 100 |
 | `FAILED` | 분석에 실패하였습니다. | 100 |
 
-`n8n` 모드에서는 `IMAGE_PROCESSING`/`TEXT_DETECTION`/`TEXT_RECOGNITION` 3단계가 n8n 워크플로우의
-실제 처리 단계가 아니라 요청 전송 전후에 발행되는 **표시용** 진행률입니다(S8 참고).
+`IMAGE_PROCESSING`/`TEXT_DETECTION`/`TEXT_RECOGNITION` 3단계는 n8n 워크플로우의 실제 처리 단계가
+아니라 요청 전송 전후에 발행되는 **표시용** 진행률입니다(S8 참고).
 
 ## FCM 알림 payload
 
@@ -71,7 +71,7 @@ Base path: `/api/v1/ocr`
 | status | data 키 | 설명 |
 | --- | --- | --- |
 | `COMPLETED` | `jobId`, `status="COMPLETED"`, `message` | 완료 메시지 |
-| `FAILED` | `jobId`, `status="FAILED"`, `errorCode`, `message` | `errorCode`는 `OCR_PROCESSING_FAILED` 또는 `N8N_DISPATCH_FAILED` |
+| `FAILED` | `jobId`, `status="FAILED"`, `errorCode`, `message` | `errorCode`는 `N8N_DISPATCH_FAILED`(n8n 전송 실패) 또는 `OCR_PROCESSING_TIMEOUT`(콜백 대기 시간 초과) |
 
 > ⚠️ **클라이언트 구현 시 주의**: 서버는 에러 텍스트를 `"message"` 키로 보냅니다. `"error"`라는
 > 키는 보내지 않습니다. (현재 안드로이드 `FcmPayloadSpec.KEY_ERROR = "error"`로 이 값을 읽으려
@@ -103,5 +103,6 @@ Base path: `/api/v1/ocr`
 }
 ```
 
-- n8n은 의약품명 정규화(오타 교정)를 거치지 않은 원문을 그대로 보내야 합니다. 서버가 별도
-  교정을 적용하지 않습니다(S8 참고).
+- n8n은 의약품명 정규화(오타 교정)를 거치지 않은 원문을 그대로 보내야 합니다. 서버가 의약품
+  사전으로 `medicineName`을 표준화하고, 원문은 `rawName`에, 교정 여부는 `autoCorrected`에 담아
+  클라이언트로 전달합니다(S8 참고).

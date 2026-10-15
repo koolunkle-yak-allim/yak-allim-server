@@ -4,7 +4,6 @@ set -e
 echo "=== [Deploy Stage] Blue-Green Deployment Started ==="
 
 DEPLOY_DIR="${DEPLOY_DIR:-${WORKSPACE}/deploy}"
-RESOURCE_DIR="${RESOURCE_DIR:-}"
 IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-yak-allim-backend}"
 IMAGE_NAME="${IMAGE_NAME:-${IMAGE_REPOSITORY}:latest}"
 IMAGE_RETENTION_COUNT="${IMAGE_RETENTION_COUNT:-5}"
@@ -13,20 +12,12 @@ N8N_WEBHOOK_URL="${N8N_WEBHOOK_URL:-http://yak-allim-n8n:5678/webhook/ocr}"
 OLD_CONTAINER_DRAIN_WAIT_SECONDS="${OLD_CONTAINER_DRAIN_WAIT_SECONDS:-30}"
 OLD_CONTAINER_STOP_TIMEOUT_SECONDS="${OLD_CONTAINER_STOP_TIMEOUT_SECONDS:-70}"
 
-# 1. 배포 디렉터리 생성 및 키/모델 준비
-mkdir -p "${DEPLOY_DIR}/models"
+# 1. 배포 디렉터리 생성 및 키 준비
+mkdir -p "${DEPLOY_DIR}"
 rm -f "${DEPLOY_DIR}/yak-allim-firebase-key.json" 2>/dev/null || true
 
 if [ -n "$FIREBASE_KEY_FILE" ] && [ -f "$FIREBASE_KEY_FILE" ]; then
     cp "$FIREBASE_KEY_FILE" "${DEPLOY_DIR}/yak-allim-firebase-key.json"
-fi
-
-if [ -n "${RESOURCE_DIR}" ] && [ -d "${RESOURCE_DIR}" ] && [ "$(ls -A "${RESOURCE_DIR}" 2>/dev/null)" ]; then
-    cp -R "${RESOURCE_DIR}/." "${DEPLOY_DIR}/models/"
-elif [ -d "src/main/resources/models" ]; then
-    cp -R src/main/resources/models/. "${DEPLOY_DIR}/models/"
-else
-    echo "OCR 모델 리소스 누락" && exit 1
 fi
 
 # 2. Docker 이미지 빌드
@@ -68,7 +59,7 @@ if [ -n "$PORT_OCCUPIED_CONTAINERS" ]; then
     done
 fi
 
-# 5. 신규 컨테이너 생성 및 자격 증명/모델 파일 주입
+# 5. 신규 컨테이너 생성 및 자격 증명 파일 주입
 docker create \
     --name "${TARGET_NAME}" \
     --restart unless-stopped \
@@ -78,17 +69,10 @@ docker create \
     "${IMAGE_NAME}" \
     --server.port=8081 \
     --notification.firebase.key-path="file:/app/yak-allim-firebase-key.json" \
-    --ocr.engine.onnx.detection-model-path="file:/app/models/ch_PP-OCRv4_det_infer.onnx" \
-    --ocr.engine.onnx.recognition-model-path="file:/app/models/korean_PP-OCRv4_rec_infer.onnx" \
-    --ocr.engine.onnx.recognition-dictionary-path="file:/app/models/korean_dict.txt" \
     --ocr.n8n.webhook-url="${N8N_WEBHOOK_URL}"
 
 if [ -f "${DEPLOY_DIR}/yak-allim-firebase-key.json" ]; then
     docker cp "${DEPLOY_DIR}/yak-allim-firebase-key.json" "${TARGET_NAME}:/app/yak-allim-firebase-key.json"
-fi
-
-if [ -d "${DEPLOY_DIR}/models" ]; then
-    docker cp "${DEPLOY_DIR}/models" "${TARGET_NAME}:/app/"
 fi
 
 docker start "${TARGET_NAME}"

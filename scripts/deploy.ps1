@@ -3,7 +3,6 @@ $ErrorActionPreference = 'Stop'
 Write-Host "=== [Deploy Stage] Blue-Green Deployment Started (Windows) ==="
 
 $deployDir = if ($env:DEPLOY_DIR) { $env:DEPLOY_DIR } else { "$env:WORKSPACE\deploy" }
-$resourceDir = if ($env:RESOURCE_DIR) { $env:RESOURCE_DIR } else { "" }
 $imageRepository = if ($env:IMAGE_REPOSITORY) { $env:IMAGE_REPOSITORY } else { "yak-allim-backend" }
 $imageName = if ($env:IMAGE_NAME) { $env:IMAGE_NAME } else { "${imageRepository}:latest" }
 $imageRetentionCount = if ($env:IMAGE_RETENTION_COUNT) { [int]$env:IMAGE_RETENTION_COUNT } else { 5 }
@@ -12,26 +11,14 @@ $n8nWebhookUrl = if ($env:N8N_WEBHOOK_URL) { $env:N8N_WEBHOOK_URL } else { "http
 $oldContainerDrainWaitSeconds = if ($env:OLD_CONTAINER_DRAIN_WAIT_SECONDS) { [int]$env:OLD_CONTAINER_DRAIN_WAIT_SECONDS } else { 30 }
 $oldContainerStopTimeoutSeconds = if ($env:OLD_CONTAINER_STOP_TIMEOUT_SECONDS) { [int]$env:OLD_CONTAINER_STOP_TIMEOUT_SECONDS } else { 70 }
 
-# 1. 배포 디렉터리 생성 및 키/모델 준비
+# 1. 배포 디렉터리 생성 및 키 준비
 if (!(Test-Path -Path "$deployDir")) {
     New-Item -ItemType Directory -Force -Path "$deployDir" | Out-Null
-}
-$modelsDir = "$deployDir\models"
-if (!(Test-Path -Path $modelsDir)) {
-    New-Item -ItemType Directory -Force -Path $modelsDir | Out-Null
 }
 
 $firebaseKeyPath = "$deployDir\yak-allim-firebase-key.json"
 if ($env:FIREBASE_KEY_FILE -and (Test-Path -Path $env:FIREBASE_KEY_FILE)) {
     Copy-Item -Path $env:FIREBASE_KEY_FILE -Destination $firebaseKeyPath -Force
-}
-
-if ($resourceDir -and (Test-Path -Path "$resourceDir") -and (Get-ChildItem -Path "$resourceDir" | Select-Object -First 1)) {
-    Copy-Item -Path "$resourceDir\*" -Destination $modelsDir -Force -Recurse
-} elseif (Test-Path -Path "src\main\resources\models") {
-    Copy-Item -Path "src\main\resources\models\*" -Destination $modelsDir -Force -Recurse
-} else {
-    throw "OCR 모델 리소스 누락"
 }
 
 # 2. Docker 이미지 빌드
@@ -75,7 +62,7 @@ if ($portOccupiedContainers) {
 }
 $ErrorActionPreference = 'Stop'
 
-# 5. 신규 컨테이너 생성 및 자격 증명/모델 파일 주입
+# 5. 신규 컨테이너 생성 및 자격 증명 파일 주입
 docker create `
     --name $targetName `
     --restart unless-stopped `
@@ -85,18 +72,11 @@ docker create `
     $imageName `
     --server.port=8081 `
     --notification.firebase.key-path="file:/app/yak-allim-firebase-key.json" `
-    --ocr.engine.onnx.detection-model-path="file:/app/models/ch_PP-OCRv4_det_infer.onnx" `
-    --ocr.engine.onnx.recognition-model-path="file:/app/models/korean_PP-OCRv4_rec_infer.onnx" `
-    --ocr.engine.onnx.recognition-dictionary-path="file:/app/models/korean_dict.txt" `
     --ocr.n8n.webhook-url="$n8nWebhookUrl"
 
 # Firebase Key 파일이 실제로 존재하는 경우에만 docker cp 수행
 if (Test-Path $firebaseKeyPath) {
     docker cp $firebaseKeyPath "${targetName}:/app/yak-allim-firebase-key.json"
-}
-
-if (Test-Path $modelsDir) {
-    docker cp "$modelsDir" "${targetName}:/app/"
 }
 
 docker start $targetName

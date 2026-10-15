@@ -2,6 +2,7 @@ package com.example.yakallim.ocr.controller
 
 import com.example.yakallim.ocr.dto.N8nCallbackRequest
 import com.example.yakallim.ocr.dto.OcrJobResponse
+import com.example.yakallim.ocr.infrastructure.N8nOcrClient
 import com.example.yakallim.ocr.model.JobStatus
 import com.example.yakallim.ocr.repository.OcrJobRepository
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -13,6 +14,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.http.MediaType
 import org.springframework.mock.web.MockMultipartFile
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers
@@ -30,6 +32,10 @@ class OcrControllerTest {
     @Autowired
     private lateinit var objectMapper: ObjectMapper
 
+    // 실제 n8n으로 전송하지 않도록 막아, 작업이 콜백을 기다리는 상태로 남게 한다.
+    @MockitoBean
+    private lateinit var n8nOcrClient: N8nOcrClient
+
     @Test
     @DisplayName("진행 중인 OCR 작업을 취소하면 상태가 CANCELLED로 변경된다")
     fun shouldCancelOcrJobAndReturnOk() {
@@ -38,7 +44,6 @@ class OcrControllerTest {
         val submitResult = mockMvc.perform(
             MockMvcRequestBuilders.multipart("/api/v1/ocr/enqueue")
                 .file(mockMultipartFile)
-                .param("delay", "5000")
         ).andExpect(MockMvcResultMatchers.status().isAccepted).andReturn()
 
         val jobId = objectMapper.readValue(submitResult.response.contentAsString, OcrJobResponse::class.java).jobId

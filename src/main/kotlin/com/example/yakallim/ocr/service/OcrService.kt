@@ -1,12 +1,20 @@
 package com.example.yakallim.ocr.service
 
+import com.example.yakallim.medicine.service.MedicineService
+import com.example.yakallim.notification.service.PushNotificationClient
 import com.example.yakallim.ocr.dto.OcrJobResponse
+import com.example.yakallim.ocr.dto.OcrResponse
 import com.example.yakallim.ocr.exception.OcrException
+import com.example.yakallim.ocr.infrastructure.N8nOcrClient
+import com.example.yakallim.ocr.model.JobStatus
 import com.example.yakallim.ocr.model.PipelineStep
+import com.example.yakallim.ocr.model.PrescribedMedicine
 import com.example.yakallim.ocr.repository.OcrJobRepository
-import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Qualifier
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.core.task.TaskRejectedException
+import org.springframework.stereotype.Service
 import org.springframework.web.multipart.MultipartFile
 import java.io.IOException
 import java.nio.file.Files
@@ -14,14 +22,21 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
-abstract class OcrService(
-    protected val ocrJobRepository: OcrJobRepository,
-    protected val ocrProgressManager: OcrProgressManager,
-    uploadDirStr: String
+/** 업로드된 처방전 이미지를 n8n 워크플로우로 넘기고, 콜백으로 받은 결과를 작업 상태·SSE·FCM으로 전달한다. */
+@Service
+class OcrService(
+    private val ocrJobRepository: OcrJobRepository,
+    private val ocrProgressManager: OcrProgressManager,
+    private val n8nOcrClient: N8nOcrClient,
+    private val medicineService: MedicineService,
+    @param:Qualifier("FCM_CLIENT") private val notifier: PushNotificationClient,
+    @Value("\${ocr.upload-dir:outputs/api-images}") uploadDirStr: String
 ) {
-    protected val log: Logger = LoggerFactory.getLogger(javaClass)
-    protected val uploadDir: Path = Paths.get(uploadDirStr).toAbsolutePath().normalize()
+    private val log = LoggerFactory.getLogger(OcrService::class.java)
+    private val uploadDir: Path = Paths.get(uploadDirStr).toAbsolutePath().normalize()
+    private val fcmTokenMap = ConcurrentHashMap<String, String>()
 
     init {
         try {
@@ -31,11 +46,7 @@ abstract class OcrService(
         }
     }
 
-    fun enqueueJob(
-        file: MultipartFile,
-        fcmToken: String?,
-        delay: Long? = null
-    ): OcrJobResponse {
+    fun enqueueJob(file: MultipartFile, fcmToken: String?): OcrJobResponse {
         if (file.isEmpty) {
             throw OcrException.EmptyFileException()
         }
@@ -70,8 +81,9 @@ abstract class OcrService(
         ocrProgressManager.publishProgress(jobId, PipelineStep.ACCEPTED)
 
         try {
-            processJob(jobId, targetPath, uniqueFileName, fcmToken, delay)
+            dispatchToN8n(jobId, targetPath, fcmToken)
         } catch (e: TaskRejectedException) {
+            fcmTokenMap.remove(jobId)
             runCatching { Files.deleteIfExists(targetPath) }
                 .onFailure { log.warn("Failed to delete uploaded image after task rejection: {}", targetPath, it) }
             val rejectionMessage = "서버가 바빠 요청을 처리할 수 없습니다. 잠시 후 다시 시도해 주세요."
@@ -84,13 +96,14 @@ abstract class OcrService(
         return job
     }
 
-    abstract fun processJob(
-        jobId: String,
-        targetPath: Path,
-        uniqueFileName: String,
-        fcmToken: String?,
-        delay: Long?
-    )
+    private fun dispatchToN8n(jobId: String, targetPath: Path, fcmToken: String?) {
+        if (fcmToken != null) {
+            fcmTokenMap[jobId] = fcmToken
+        }
+        n8nOcrClient.sendToN8nAsync(jobId, targetPath.toFile(), fcmToken) { failedJobId ->
+            fcmTokenMap.remove(failedJobId)
+        }
+    }
 
     fun getJob(jobId: String): OcrJobResponse? = ocrJobRepository.getJob(jobId)
 
@@ -98,12 +111,65 @@ abstract class OcrService(
         val job = ocrJobRepository.getJob(jobId)
             ?: throw OcrException.JobNotFoundException("존재하지 않는 작업ID: $jobId")
 
-        if (job.status == com.example.yakallim.ocr.model.JobStatus.COMPLETED || job.status == com.example.yakallim.ocr.model.JobStatus.FAILED) {
+        if (job.status == JobStatus.COMPLETED || job.status == JobStatus.FAILED) {
             throw OcrException.IllegalJobStateException("이미 종료된 작업은 취소할 수 없습니다. (작업ID: $jobId, 상태: ${job.status})")
         }
 
         ocrJobRepository.updateToCancelled(jobId)
         log.info("OCR job cancellation requested: jobId='{}' (previous status: {})", jobId, job.status)
+    }
+
+    /** PROCESSING 타임아웃으로 강제 종료될 때 호출된다. 남아있는 FCM 토큰을 정리하고, 있으면 실패 알림을 보낸다. */
+    fun handleTimeout(jobId: String, userFacingMessage: String) {
+        val token = fcmTokenMap.remove(jobId) ?: return
+        notifier.notify(
+            token = token,
+            title = "복약 안내서 분석 실패",
+            body = userFacingMessage,
+            data = mapOf(
+                "jobId" to jobId,
+                "status" to "FAILED",
+                "errorCode" to "OCR_PROCESSING_TIMEOUT",
+                "message" to userFacingMessage
+            )
+        )
+    }
+
+    /** n8n이 넘긴 약품명을 서버 의약품 사전으로 표준화한다. */
+    private fun normalizeMedicineNames(medicines: List<PrescribedMedicine>): List<PrescribedMedicine> =
+        medicines.map { medicine ->
+            val standardName = medicineService.findStandardName(medicine.medicineName)
+            medicine.copy(
+                medicineName = standardName,
+                rawName = medicine.medicineName,
+                autoCorrected = standardName != medicine.medicineName
+            )
+        }
+
+    fun handleCallback(jobId: String, medicines: List<PrescribedMedicine>) {
+        val response = OcrResponse(
+            fileName = "n8n_ocr_$jobId",
+            message = "복약 안내서 분석이 완료되었습니다.\n복약 지침을 확인해 보세요.",
+            textBlocks = emptyList(),
+            medicines = normalizeMedicineNames(medicines)
+        )
+
+        val transitionApplied = ocrJobRepository.updateToCompleted(jobId, response)
+
+        val token = fcmTokenMap.remove(jobId)
+
+        if (transitionApplied) {
+            ocrProgressManager.publishProgress(jobId, PipelineStep.COMPLETED, response.message)
+
+            if (!token.isNullOrEmpty()) {
+                notifier.notify(
+                    token = token,
+                    title = "복약 안내서 분석 완료",
+                    body = response.message,
+                    data = mapOf("jobId" to jobId, "status" to "COMPLETED", "message" to response.message)
+                )
+            }
+        }
     }
 
     companion object {

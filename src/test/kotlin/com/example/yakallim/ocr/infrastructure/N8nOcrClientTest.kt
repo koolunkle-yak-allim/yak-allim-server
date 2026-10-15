@@ -1,4 +1,4 @@
-package com.example.yakallim.ocr.engine
+package com.example.yakallim.ocr.infrastructure
 
 import com.example.yakallim.notification.service.PushNotificationClient
 import com.example.yakallim.ocr.config.OcrProperties
@@ -28,22 +28,6 @@ import org.mockito.kotlin.verifyNoInteractions
 class N8nOcrClientTest {
 
     private val ocrProperties = OcrProperties(
-        type = "n8n",
-        engine = OcrProperties.Engine(
-            onnx = OcrProperties.Engine.Onnx(
-                detectionModelPath = "",
-                recognitionModelPath = "",
-                recognitionDictionaryPath = "",
-                detectionThreshold = 0.5f
-            )
-        ),
-        parser = OcrProperties.Parser(
-            yOffsetRatio = 0.0,
-            yDeviationThresholdRatio = 0.0,
-            columnSeparatorXRatio = 0.0,
-            medicineMinXRatio = 0.0,
-            medicineMaxXRatio = 0.0
-        ),
         n8n = OcrProperties.N8n(webhookUrl = "http://n8n.test/webhook/ocr", webhookSecret = "test-secret")
     )
 
@@ -123,6 +107,7 @@ class N8nOcrClientTest {
             onDispatchFailure = {}
         )
 
+        verify(ocrJobRepository).updateToProcessing("job-2")
         verify(ocrProgressManager).publishProgress(eq("job-2"), eq(PipelineStep.TEXT_RECOGNITION), anyOrNull(), anyOrNull())
         verifyNoInteractions(notifier)
     }
