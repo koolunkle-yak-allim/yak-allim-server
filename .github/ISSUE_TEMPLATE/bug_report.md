@@ -23,4 +23,3 @@ assignees: ''
 * OS: (예: Windows 11, Linux, MacOS)
 * JDK Version: (예: OpenJDK 17)
 * Spring Boot Version: (예: 3.5.15)
-* Database (선택): (예: H2, Local DB)
