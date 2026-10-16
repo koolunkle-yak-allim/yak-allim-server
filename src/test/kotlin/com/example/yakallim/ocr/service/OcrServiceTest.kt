@@ -4,7 +4,6 @@ import com.example.yakallim.notification.service.PushNotificationClient
 import com.example.yakallim.ocr.dto.N8nCallbackRequest
 import com.example.yakallim.ocr.dto.N8nCallbackData
 import com.example.yakallim.ocr.exception.OcrException
-import com.example.yakallim.ocr.infrastructure.N8nOcrClient
 import com.example.yakallim.ocr.model.JobStatus
 import com.example.yakallim.ocr.model.PipelineStep
 import com.example.yakallim.ocr.model.PrescribedMedicine
@@ -48,8 +47,8 @@ class OcrServiceTest {
         service = OcrService(
             ocrJobRepository = ocrJobRepository,
             ocrProgressManager = ocrProgressManager,
-            n8nOcrClient = mock<N8nOcrClient>(),
-            notifier = notifier,
+            ocrJobDispatcher = mock<OcrJobDispatcher>(),
+            ocrJobNotifier = OcrJobNotifier(notifier),
             uploadDirStr = uploadDir.toString()
         )
     }

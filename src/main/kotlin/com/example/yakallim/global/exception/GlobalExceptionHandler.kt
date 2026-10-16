@@ -1,6 +1,5 @@
 package com.example.yakallim.global.exception
 
-import com.example.yakallim.ocr.exception.OcrException
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
@@ -21,9 +20,9 @@ import org.springframework.web.servlet.resource.NoResourceFoundException
 class GlobalExceptionHandler {
     private val log = LoggerFactory.getLogger(GlobalExceptionHandler::class.java)
 
-    @ExceptionHandler(OcrException::class)
-    fun handleOcrException(ex: OcrException): ResponseEntity<ErrorResponse> {
-        log.error("OCR API exception occurred: [{}], message: {}", ex.status, ex.message)
+    @ExceptionHandler(BusinessException::class)
+    fun handleBusinessException(ex: BusinessException): ResponseEntity<ErrorResponse> {
+        log.error("Business exception occurred: [{}], message: {}", ex.status, ex.message)
         return errorResponse(ex.status, ex.message)
     }
 

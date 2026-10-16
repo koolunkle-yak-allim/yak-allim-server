@@ -1,7 +1,6 @@
 package com.example.yakallim.ocr.service
 
 import com.example.yakallim.ocr.exception.OcrException
-import com.example.yakallim.ocr.infrastructure.N8nOcrClient
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -9,7 +8,6 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import org.mockito.kotlin.any
-import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.mock
 import org.springframework.core.task.TaskRejectedException
@@ -29,14 +27,14 @@ class OcrServiceRejectionTest {
     fun cleansUpAndReturns503WhenExecutorRejectsTask() {
         val ocrJobRepository = FakeOcrJobRepository()
         val ocrProgressManager = OcrProgressManager(ocrJobRepository)
-        val rejectingClient = mock<N8nOcrClient> {
-            on { sendToN8nAsync(any(), any(), anyOrNull(), any()) } doThrow TaskRejectedException("executor queue is full")
+        val rejectingDispatcher = mock<OcrJobDispatcher> {
+            on { dispatch(any(), any()) } doThrow TaskRejectedException("executor queue is full")
         }
         val service = OcrService(
             ocrJobRepository = ocrJobRepository,
             ocrProgressManager = ocrProgressManager,
-            n8nOcrClient = rejectingClient,
-            notifier = NoOpPushNotificationClient(),
+            ocrJobDispatcher = rejectingDispatcher,
+            ocrJobNotifier = OcrJobNotifier(NoOpPushNotificationClient()),
             uploadDirStr = uploadDir.toString()
         )
         val file = MockMultipartFile("file", "test.jpg", "image/jpeg", "content".toByteArray())

@@ -19,10 +19,10 @@
 ## Tech Stack
 
 - **Framework**: Spring Boot 3.5.15
-- **Language**: Kotlin 2.0.21 (Coroutines)
+- **Language**: Kotlin 2.0.21
 - **Libraries**:
   - Firebase Admin SDK 9.2.0
-  - Ktor Client (n8n Webhook 비동기 HTTP 통신)
+  - Spring RestClient (n8n Webhook 전송)
   - SpringDoc OpenAPI(Swagger UI)
 - **Testing**: JUnit 5, Mockito-Kotlin
 - **Build**: Gradle (Kotlin DSL)
@@ -39,20 +39,20 @@
 com.example.yakallim
 ├── global                 # 공통 전역 처리
 │   ├── config             # Swagger / OpenApi, CORS 등 전역 설정
-│   └── exception          # 전역 예외 처리(@RestControllerAdvice) 및 공통 ErrorResponse
+│   └── exception          # 전역 예외 처리(@RestControllerAdvice), 공통 BusinessException·ErrorResponse
 ├── notification            # 알림 발송
 │   ├── config              # FCM 설정
 │   ├── infrastructure      # Firebase FCM 구현체
 │   └── service              # NotificationClient 인터페이스
 └── ocr                     # 복약 안내서 분석 작업 (핵심 도메인)
-    ├── config              # n8n 연동/비동기 실행기 설정 프로퍼티
+    ├── config              # n8n 연동 프로퍼티·HTTP 클라이언트, 비동기 실행기 설정
     ├── controller          # REST API 컨트롤러
     ├── dto                 # 요청/응답 DTO
     ├── exception           # OCR 도메인 전용 예외
-    ├── infrastructure      # n8n Webhook Client
+    ├── infrastructure      # n8n Webhook 전송 클라이언트(N8nOcrClient)
     ├── model               # OCR 도메인 모델(PipelineStep, PrescribedMedicine 등)
     ├── repository          # 작업 상태 저장소(InMemoryOcrJobRepository)
-    └── service             # 작업 접수·콜백 처리, 진행률 SSE, 정리 스케줄러
+    └── service             # 작업 접수·콜백 처리, n8n 비동기 전송, FCM 알림, 진행률 SSE, 정리 스케줄러
 ```
 
 API 엔드포인트·SSE 이벤트·FCM 페이로드·n8n 콜백 등 서버-클라이언트 계약은 [`docs/api-contract.md`](docs/api-contract.md)에 별도로 정리되어 있습니다.
