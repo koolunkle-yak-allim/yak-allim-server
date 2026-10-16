@@ -55,6 +55,6 @@ jobs:
     steps:
       - name: Trigger Jenkins Build
         run: |
-          curl -X POST "${{ secrets.JENKINS_WEBHOOK_URL }}?token=${{ secrets.JENKINS_TRIGGER_TOKEN }}" \
+          curl -sS --fail-with-body -X POST "${{ secrets.JENKINS_WEBHOOK_URL }}?token=${{ secrets.JENKINS_TRIGGER_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '{"ref": "${{ github.ref }}", "repository": "${{ github.repository }}", "commit": "${{ github.sha }}"}'
