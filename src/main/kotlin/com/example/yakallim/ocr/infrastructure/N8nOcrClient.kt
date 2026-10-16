@@ -2,7 +2,6 @@ package com.example.yakallim.ocr.infrastructure
 
 import com.example.yakallim.notification.service.PushNotificationClient
 import com.example.yakallim.ocr.config.OcrProperties
-import com.example.yakallim.ocr.exception.OcrErrorMessageResolver
 import com.example.yakallim.ocr.model.PipelineStep
 import com.example.yakallim.ocr.repository.OcrJobRepository
 import com.example.yakallim.ocr.service.OcrProgressManager
@@ -54,9 +53,7 @@ class N8nOcrClient(
                     .toUriString()
 
                 val response = httpClient.post(uri) {
-                    if (ocrProperties.n8n.webhookSecret.isNotBlank()) {
-                        header("X-N8N-WEBHOOK-SECRET", ocrProperties.n8n.webhookSecret)
-                    }
+                    header("X-N8N-WEBHOOK-SECRET", ocrProperties.n8n.webhookSecret)
                     setBody(
                         MultiPartFormDataContent(
                             formData {
@@ -82,7 +79,7 @@ class N8nOcrClient(
                 ocrProgressManager.publishProgress(jobId, PipelineStep.ANALYZING)
             } catch (e: Exception) {
                 log.error("Failed to send image to n8n: jobId='{}'", jobId, e)
-                val userFacingMessage = OcrErrorMessageResolver.resolve(e)
+                val userFacingMessage = DISPATCH_FAILED_MESSAGE
                 val transitionApplied = ocrJobRepository.updateToFailed(jobId, userFacingMessage)
 
                 onDispatchFailure(jobId)
@@ -108,5 +105,9 @@ class N8nOcrClient(
                     .onFailure { log.warn("Failed to delete uploaded prescription image: {}", file.absolutePath, it) }
             }
         }
+    }
+
+    companion object {
+        private const val DISPATCH_FAILED_MESSAGE = "복약 안내서 분석 중 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
     }
 }

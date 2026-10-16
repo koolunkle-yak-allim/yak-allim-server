@@ -2,6 +2,8 @@ package com.example.yakallim.ocr.repository
 
 import com.example.yakallim.ocr.dto.OcrJobResponse
 import com.example.yakallim.ocr.dto.OcrResponse
+import com.example.yakallim.ocr.model.JobStatus
+import java.time.Instant
 
 interface OcrJobRepository {
     fun registerJob(jobId: String): OcrJobResponse
@@ -12,4 +14,7 @@ interface OcrJobRepository {
     fun updateToCancelled(jobId: String): Boolean
     fun getJob(jobId: String): OcrJobResponse?
     fun isCancelled(jobId: String): Boolean
+    /** 지정한 상태들 중 하나이면서 마지막 갱신 시각이 [cutoff]보다 오래된 작업의 ID 목록. */
+    fun findJobIdsInStatusUpdatedBefore(statuses: Set<JobStatus>, cutoff: Instant): List<String>
+    fun deleteJob(jobId: String)
 }

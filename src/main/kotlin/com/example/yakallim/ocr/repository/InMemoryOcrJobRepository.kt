@@ -39,13 +39,12 @@ class InMemoryOcrJobRepository(
 
     override fun isCancelled(jobId: String): Boolean = jobRegistry[jobId]?.response?.status == JobStatus.CANCELLED
 
-    /** 지정한 상태들 중 하나이면서 마지막 갱신 시각이 [cutoff]보다 오래된 작업의 ID 목록. */
-    fun findJobIdsInStatusUpdatedBefore(statuses: Set<JobStatus>, cutoff: Instant): List<String> =
+    override fun findJobIdsInStatusUpdatedBefore(statuses: Set<JobStatus>, cutoff: Instant): List<String> =
         jobRegistry.entries
             .filter { (_, record) -> record.response.status in statuses && record.updatedAt.isBefore(cutoff) }
             .map { (jobId, _) -> jobId }
 
-    fun deleteJob(jobId: String) {
+    override fun deleteJob(jobId: String) {
         jobRegistry.remove(jobId)
     }
 
