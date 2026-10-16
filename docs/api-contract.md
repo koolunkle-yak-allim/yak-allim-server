@@ -17,7 +17,7 @@ Base path: `/api/v1/ocr`
 
 | Method | Path                     | 요청                                                                  | 응답                                                     | 비고                          |
 |--------|--------------------------|---------------------------------------------------------------------|--------------------------------------------------------|-----------------------------|
-| POST   | `/enqueue`               | `multipart/form-data`: `file`(필수, jpg/png/gif/webp), `fcmToken`(선택) | `202 Accepted` + `OcrJobResponse`                      | 작업을 등록하고 즉시 반환, 처리는 비동기     |
+| POST   | `/enqueue`               | `multipart/form-data`: `file`(필수, jpg/png/gif/webp), `fcmToken`(선택) | `202 Accepted` + `OcrJobResponse` / `400` / `413` / `503` | 작업을 등록하고 즉시 반환, 처리는 비동기     |
 | GET    | `/jobs/{jobId}`          | -                                                                   | `200 OK` + `OcrJobResponse` / `404 Not Found`          | 작업 현재 상태 조회                 |
 | GET    | `/jobs/{jobId}/progress` | -                                                                   | `200 OK`, `text/event-stream`                          | 아래 [SSE 이벤트](#sse-이벤트) 참고   |
 | POST   | `/jobs/{jobId}/cancel`   | -                                                                   | `204 No Content` / `400 Bad Request` / `404 Not Found` | 진행 중인 작업 취소. 이미 종료된 작업은 400 |
@@ -50,6 +50,33 @@ Base path: `/api/v1/ocr`
 - `error`에는 내부 원인(HTTP 상태 코드, n8n 오류 등)이 아니라 사용자에게 그대로 보여줄 수 있는 메시지가 들어갑니다.
 
 `status`(`JobStatus`)는 작업의 거친 상태이고, 진행 표시는 SSE의 `PipelineStep`을 참고하세요.
+
+### 오류 응답 (`ErrorResponse`)
+
+4xx/5xx 응답의 본문은 아래 형식입니다. `message`는 사용자에게 그대로 보여줄 수 있는 문장입니다.
+
+```json
+{
+  "status": 400,
+  "error": "Bad Request",
+  "message": "필수 요청 값이 없습니다: file",
+  "timestamp": "2026-10-17T00:00:00"
+}
+```
+
+| 상태 | 발생 상황 |
+| --- | --- |
+| `400` | 필수 값 누락(`file` 등), 빈 파일, 허용하지 않는 확장자, 본문 JSON 형식 오류, 본문 검증 실패, 이미 종료된 작업 취소 |
+| `401` | n8n 콜백의 `X-N8N-Secret` 불일치 |
+| `404` | 존재하지 않는 작업 또는 경로 |
+| `405` | 지원하지 않는 HTTP 메서드 |
+| `413` | 업로드 크기 제한(10MB) 초과 |
+| `415` | 지원하지 않는 `Content-Type`(예: 업로드를 `multipart/form-data`가 아닌 형식으로 전송) |
+| `503` | 서버 대기열이 가득 참. 잠시 후 다시 시도 |
+| `500` | 그 외 서버 내부 오류 |
+
+`GET /jobs/{jobId}`의 `404`, 콜백의 `jobId` 불일치 `400`은 본문 없이 응답합니다.
+nginx를 거칠 때 10MB를 넘는 업로드는 nginx가 먼저 막아 HTML `413`을 반환할 수 있습니다.
 
 ## SSE 이벤트
 
