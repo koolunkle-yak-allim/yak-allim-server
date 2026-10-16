@@ -2,7 +2,7 @@ package com.example.yakallim.ocr.controller
 
 import com.example.yakallim.ocr.config.OcrProperties
 import com.example.yakallim.ocr.dto.N8nCallbackRequest
-import com.example.yakallim.ocr.dto.N8nData
+import com.example.yakallim.ocr.dto.N8nCallbackData
 import com.example.yakallim.ocr.exception.OcrException
 import com.example.yakallim.ocr.service.OcrProgressManager
 import com.example.yakallim.ocr.service.OcrService
@@ -33,7 +33,7 @@ class OcrWebhookSecretTest {
         controller = OcrController(ocrService, ocrProgressManager, ocrProperties)
     }
 
-    private fun request(jobId: String) = N8nCallbackRequest(jobId = jobId, status = "COMPLETED", data = N8nData())
+    private fun request(jobId: String) = N8nCallbackRequest(jobId = jobId, status = "COMPLETED", data = N8nCallbackData())
 
     @Test
     @DisplayName("웹훅 시크릿이 없으면 401을 던진다")

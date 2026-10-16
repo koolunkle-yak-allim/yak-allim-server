@@ -2,7 +2,7 @@ package com.example.yakallim.ocr.service
 
 import com.example.yakallim.notification.service.PushNotificationClient
 import com.example.yakallim.ocr.dto.N8nCallbackRequest
-import com.example.yakallim.ocr.dto.N8nData
+import com.example.yakallim.ocr.dto.N8nCallbackData
 import com.example.yakallim.ocr.exception.OcrException
 import com.example.yakallim.ocr.infrastructure.N8nOcrClient
 import com.example.yakallim.ocr.model.JobStatus
@@ -68,7 +68,7 @@ class OcrServiceTest {
             PrescribedMedicine(medicineName = "   ")
         )
 
-        service.handleCallback(N8nCallbackRequest(jobId = jobId, status = "COMPLETED", data = N8nData(medicines)))
+        service.handleCallback(N8nCallbackRequest(jobId = jobId, status = "COMPLETED", data = N8nCallbackData(medicines)))
 
         val job = ocrJobRepository.getJob(jobId)
         assertEquals(JobStatus.COMPLETED, job?.status)

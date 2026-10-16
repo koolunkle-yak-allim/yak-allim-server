@@ -8,7 +8,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.context.annotation.Profile
 import org.springframework.stereotype.Component
 
-@Component("FCM_CLIENT")
+@Component
 @Profile("!test")
 class FcmPushNotificationClient(
     private val firebaseMessaging: FirebaseMessaging

@@ -2,7 +2,7 @@ package com.example.yakallim.ocr.model
 
 import com.example.yakallim.ocr.dto.OcrJobResponse
 import com.example.yakallim.ocr.dto.OcrProgressResponse
-import com.example.yakallim.ocr.dto.OcrResponse
+import com.example.yakallim.ocr.dto.OcrResult
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.DisplayName
@@ -54,7 +54,7 @@ class ApiContractTest {
         val job = OcrJobResponse(
             jobId = "job-1",
             status = JobStatus.COMPLETED,
-            result = OcrResponse(message = "m", medicines = listOf(medicine))
+            result = OcrResult(message = "m", medicines = listOf(medicine))
         )
 
         assertEquals(listOf("jobId", "status", "result", "error"), fieldNamesOf(job))

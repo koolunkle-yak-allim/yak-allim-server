@@ -17,7 +17,7 @@ import kotlin.streams.asSequence
 @Component
 class UploadCleanupScheduler(
     @param:Value("\${ocr.upload-dir:outputs/api-images}") private val uploadDirStr: String,
-    @param:Value("\${ocr.retention-minutes:60}") private val retentionMinutes: Long,
+    @param:Value("\${ocr.upload-retention-minutes:60}") private val retentionMinutes: Long,
     private val clock: Clock
 ) {
     private val log = LoggerFactory.getLogger(UploadCleanupScheduler::class.java)

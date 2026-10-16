@@ -3,14 +3,13 @@ package com.example.yakallim.ocr.service
 import com.example.yakallim.notification.service.PushNotificationClient
 import com.example.yakallim.ocr.dto.N8nCallbackRequest
 import com.example.yakallim.ocr.dto.OcrJobResponse
-import com.example.yakallim.ocr.dto.OcrResponse
+import com.example.yakallim.ocr.dto.OcrResult
 import com.example.yakallim.ocr.exception.OcrException
 import com.example.yakallim.ocr.infrastructure.N8nOcrClient
 import com.example.yakallim.ocr.model.PipelineStep
 import com.example.yakallim.ocr.model.PrescribedMedicine
 import com.example.yakallim.ocr.repository.OcrJobRepository
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.core.task.TaskRejectedException
 import org.springframework.stereotype.Service
@@ -29,7 +28,7 @@ class OcrService(
     private val ocrJobRepository: OcrJobRepository,
     private val ocrProgressManager: OcrProgressManager,
     private val n8nOcrClient: N8nOcrClient,
-    @param:Qualifier("FCM_CLIENT") private val notifier: PushNotificationClient,
+    private val notifier: PushNotificationClient,
     @Value("\${ocr.upload-dir:outputs/api-images}") uploadDirStr: String
 ) {
     private val log = LoggerFactory.getLogger(OcrService::class.java)
@@ -144,14 +143,14 @@ class OcrService(
     }
 
     private fun handleSuccess(jobId: String, medicines: List<PrescribedMedicine>) {
-        val response = OcrResponse(
+        val result = OcrResult(
             message = COMPLETED_MESSAGE,
             medicines = medicines
                 .map { it.copy(medicineName = it.medicineName.trim()) }
                 .filter { it.medicineName.isNotEmpty() }
         )
 
-        val transitionApplied = ocrJobRepository.updateToCompleted(jobId, response)
+        val transitionApplied = ocrJobRepository.updateToCompleted(jobId, result)
         val token = fcmTokenMap.remove(jobId)
 
         if (!transitionApplied) {
@@ -159,14 +158,14 @@ class OcrService(
             return
         }
 
-        ocrProgressManager.publishProgress(jobId, PipelineStep.COMPLETED, response.message)
+        ocrProgressManager.publishProgress(jobId, PipelineStep.COMPLETED, result.message)
 
         if (!token.isNullOrEmpty()) {
             notifier.notify(
                 token = token,
                 title = "복약 안내서 분석 완료",
-                body = response.message,
-                data = mapOf("jobId" to jobId, "status" to "COMPLETED", "message" to response.message)
+                body = result.message,
+                data = mapOf("jobId" to jobId, "status" to "COMPLETED", "message" to result.message)
             )
         }
     }
