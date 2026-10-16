@@ -16,7 +16,7 @@ class MockFcmConfig {
         return Mockito.mock(FirebaseMessaging::class.java)
     }
 
-    @Bean("FCM_CLIENT")
+    @Bean
     fun mockNotificationClient(): PushNotificationClient {
         return object : PushNotificationClient {
             override fun notify(token: String, title: String, body: String, data: Map<String, String>) {

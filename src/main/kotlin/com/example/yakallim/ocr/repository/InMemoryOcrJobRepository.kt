@@ -1,7 +1,7 @@
 package com.example.yakallim.ocr.repository
 
 import com.example.yakallim.ocr.dto.OcrJobResponse
-import com.example.yakallim.ocr.dto.OcrResponse
+import com.example.yakallim.ocr.dto.OcrResult
 import com.example.yakallim.ocr.model.JobStatus
 import org.springframework.stereotype.Repository
 import java.time.Clock
@@ -26,7 +26,7 @@ class InMemoryOcrJobRepository(
     override fun updateToProcessing(jobId: String): Boolean =
         transitionIfActive(jobId) { it.copy(status = JobStatus.PROCESSING) }
 
-    override fun updateToCompleted(jobId: String, result: OcrResponse): Boolean =
+    override fun updateToCompleted(jobId: String, result: OcrResult): Boolean =
         transitionIfActive(jobId) { it.copy(status = JobStatus.COMPLETED, result = result) }
 
     override fun updateToFailed(jobId: String, errorMessage: String): Boolean =

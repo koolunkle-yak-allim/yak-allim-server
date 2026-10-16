@@ -28,7 +28,7 @@ import java.io.File
 class N8nOcrClient(
     private val ocrJobRepository: OcrJobRepository,
     private val ocrProgressManager: OcrProgressManager,
-    @param:Qualifier("FCM_CLIENT") private val notifier: PushNotificationClient,
+    private val notifier: PushNotificationClient,
     private val ocrProperties: OcrProperties,
     @param:Qualifier("n8nKtorClient") private val httpClient: HttpClient
 ) {

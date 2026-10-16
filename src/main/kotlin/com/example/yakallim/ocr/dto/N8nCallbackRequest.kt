@@ -11,7 +11,7 @@ data class N8nCallbackRequest(
     /** 실패 시 n8n이 남기는 원인. 로그에만 남기고 클라이언트에는 노출하지 않는다. */
     val error: String? = null,
     @field:Valid
-    val data: N8nData = N8nData()
+    val data: N8nCallbackData = N8nCallbackData()
 ) {
     val isFailure: Boolean
         get() = status.equals(STATUS_FAILED, ignoreCase = true)
