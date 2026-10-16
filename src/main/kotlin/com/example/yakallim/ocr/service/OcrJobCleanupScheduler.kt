@@ -1,5 +1,6 @@
 package com.example.yakallim.ocr.service
 
+import com.example.yakallim.ocr.model.FailureCode
 import com.example.yakallim.ocr.model.JobStatus
 import com.example.yakallim.ocr.model.PipelineStep
 import com.example.yakallim.ocr.repository.OcrJobRepository
@@ -16,7 +17,7 @@ private const val PROCESSING_TIMEOUT_MESSAGE = "처리 시간이 초과되었습
 class OcrJobCleanupScheduler(
     private val ocrJobRepository: OcrJobRepository,
     private val ocrProgressManager: OcrProgressManager,
-    private val ocrService: OcrService,
+    private val ocrJobNotifier: OcrJobNotifier,
     private val clock: Clock,
     @param:Value("\${ocr.job-retention-minutes:60}") private val retentionMinutes: Long,
     @param:Value("\${ocr.job-processing-timeout-minutes:15}") private val processingTimeoutMinutes: Long
@@ -48,7 +49,7 @@ class OcrJobCleanupScheduler(
             // 조회와 전이 사이에 콜백이 도착했을 수 있으므로, 실제로 FAILED로 전이된 경우에만 알린다.
             if (!ocrJobRepository.updateToFailed(jobId, PROCESSING_TIMEOUT_MESSAGE)) return@forEach
             ocrProgressManager.publishProgress(jobId, PipelineStep.FAILED, PROCESSING_TIMEOUT_MESSAGE)
-            ocrService.handleTimeout(jobId, PROCESSING_TIMEOUT_MESSAGE)
+            ocrJobNotifier.notifyFailed(jobId, PROCESSING_TIMEOUT_MESSAGE, FailureCode.OCR_PROCESSING_TIMEOUT)
             log.warn("OCR job marked FAILED due to processing timeout: jobId='{}'", jobId)
         }
     }

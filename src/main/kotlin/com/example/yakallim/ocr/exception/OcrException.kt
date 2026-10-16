@@ -1,12 +1,13 @@
 package com.example.yakallim.ocr.exception
 
+import com.example.yakallim.global.exception.BusinessException
 import org.springframework.http.HttpStatus
 
 sealed class OcrException(
-    val status: HttpStatus,
-    override val message: String,
+    status: HttpStatus,
+    message: String,
     cause: Throwable? = null
-) : RuntimeException(message, cause) {
+) : BusinessException(status, message, cause) {
 
     class EmptyFileException(message: String = "파일이 업로드되지 않았거나 비어 있습니다.") :
         OcrException(HttpStatus.BAD_REQUEST, message)

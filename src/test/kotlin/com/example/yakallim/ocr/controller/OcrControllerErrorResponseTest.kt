@@ -1,6 +1,6 @@
 package com.example.yakallim.ocr.controller
 
-import com.example.yakallim.ocr.infrastructure.N8nOcrClient
+import com.example.yakallim.ocr.service.OcrJobDispatcher
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -23,7 +23,7 @@ class OcrControllerErrorResponseTest {
     private lateinit var mockMvc: MockMvc
 
     @MockitoBean
-    private lateinit var n8nOcrClient: N8nOcrClient
+    private lateinit var ocrJobDispatcher: OcrJobDispatcher
 
     @Test
     @DisplayName("file 없이 업로드하면 400을 반환한다")

@@ -1,11 +1,10 @@
 package com.example.yakallim.ocr.service
 
-import com.example.yakallim.notification.service.PushNotificationClient
 import com.example.yakallim.ocr.dto.N8nCallbackRequest
 import com.example.yakallim.ocr.dto.OcrJobResponse
 import com.example.yakallim.ocr.dto.OcrResult
 import com.example.yakallim.ocr.exception.OcrException
-import com.example.yakallim.ocr.infrastructure.N8nOcrClient
+import com.example.yakallim.ocr.model.FailureCode
 import com.example.yakallim.ocr.model.PipelineStep
 import com.example.yakallim.ocr.model.PrescribedMedicine
 import com.example.yakallim.ocr.repository.OcrJobRepository
@@ -20,20 +19,18 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 
 /** 업로드된 처방전 이미지를 n8n 워크플로우로 넘기고, 콜백으로 받은 결과를 작업 상태·SSE·FCM으로 전달한다. */
 @Service
 class OcrService(
     private val ocrJobRepository: OcrJobRepository,
     private val ocrProgressManager: OcrProgressManager,
-    private val n8nOcrClient: N8nOcrClient,
-    private val notifier: PushNotificationClient,
+    private val ocrJobDispatcher: OcrJobDispatcher,
+    private val ocrJobNotifier: OcrJobNotifier,
     @Value("\${ocr.upload-dir:outputs/api-images}") uploadDirStr: String
 ) {
     private val log = LoggerFactory.getLogger(OcrService::class.java)
     private val uploadDir: Path = Paths.get(uploadDirStr).toAbsolutePath().normalize()
-    private val fcmTokenMap = ConcurrentHashMap<String, String>()
 
     init {
         try {
@@ -76,11 +73,12 @@ class OcrService(
         val job = ocrJobRepository.registerJob(jobId)
 
         ocrProgressManager.publishProgress(jobId, PipelineStep.ACCEPTED)
+        ocrJobNotifier.register(jobId, fcmToken)
 
         try {
-            dispatchToN8n(jobId, targetPath, fcmToken)
+            ocrJobDispatcher.dispatch(jobId, targetPath)
         } catch (e: TaskRejectedException) {
-            fcmTokenMap.remove(jobId)
+            ocrJobNotifier.discard(jobId)
             runCatching { Files.deleteIfExists(targetPath) }
                 .onFailure { log.warn("Failed to delete uploaded image after task rejection: {}", targetPath, it) }
             val rejectionMessage = "서버가 바빠 요청을 처리할 수 없습니다. 잠시 후 다시 시도해 주세요."
@@ -93,15 +91,6 @@ class OcrService(
         return job
     }
 
-    private fun dispatchToN8n(jobId: String, targetPath: Path, fcmToken: String?) {
-        if (fcmToken != null) {
-            fcmTokenMap[jobId] = fcmToken
-        }
-        n8nOcrClient.sendToN8nAsync(jobId, targetPath.toFile(), fcmToken) { failedJobId ->
-            fcmTokenMap.remove(failedJobId)
-        }
-    }
-
     fun getJob(jobId: String): OcrJobResponse? = ocrJobRepository.getJob(jobId)
 
     fun cancelJob(jobId: String) {
@@ -112,25 +101,9 @@ class OcrService(
             throw OcrException.IllegalJobStateException("이미 종료된 작업은 취소할 수 없습니다. (작업ID: $jobId, 상태: ${job.status})")
         }
 
-        fcmTokenMap.remove(jobId)
+        ocrJobNotifier.discard(jobId)
         ocrProgressManager.publishProgress(jobId, PipelineStep.CANCELLED)
         log.info("OCR job cancelled: jobId='{}' (previous status: {})", jobId, job.status)
-    }
-
-    /** PROCESSING 타임아웃으로 강제 종료될 때 호출된다. 남아있는 FCM 토큰을 정리하고, 있으면 실패 알림을 보낸다. */
-    fun handleTimeout(jobId: String, userFacingMessage: String) {
-        val token = fcmTokenMap.remove(jobId) ?: return
-        notifier.notify(
-            token = token,
-            title = "복약 안내서 분석 실패",
-            body = userFacingMessage,
-            data = mapOf(
-                "jobId" to jobId,
-                "status" to "FAILED",
-                "errorCode" to "OCR_PROCESSING_TIMEOUT",
-                "message" to userFacingMessage
-            )
-        )
     }
 
     fun handleCallback(request: N8nCallbackRequest) {
@@ -150,50 +123,27 @@ class OcrService(
                 .filter { it.medicineName.isNotEmpty() }
         )
 
-        val transitionApplied = ocrJobRepository.updateToCompleted(jobId, result)
-        val token = fcmTokenMap.remove(jobId)
-
-        if (!transitionApplied) {
+        if (!ocrJobRepository.updateToCompleted(jobId, result)) {
+            ocrJobNotifier.discard(jobId)
             log.info("Ignoring n8n callback for job that is no longer active: jobId='{}'", jobId)
             return
         }
 
         ocrProgressManager.publishProgress(jobId, PipelineStep.COMPLETED, result.message)
-
-        if (!token.isNullOrEmpty()) {
-            notifier.notify(
-                token = token,
-                title = "복약 안내서 분석 완료",
-                body = result.message,
-                data = mapOf("jobId" to jobId, "status" to "COMPLETED", "message" to result.message)
-            )
-        }
+        ocrJobNotifier.notifyCompleted(jobId, result.message)
     }
 
     /** n8n 워크플로우가 분석 실패를 콜백으로 알린 경우. 원인은 로그에만 남기고 사용자에게는 일반 메시지를 보낸다. */
     private fun handleFailure(jobId: String, reason: String?) {
         log.warn("n8n reported analysis failure: jobId='{}', reason='{}'", jobId, reason)
 
-        val transitionApplied = ocrJobRepository.updateToFailed(jobId, ANALYSIS_FAILED_MESSAGE)
-        val token = fcmTokenMap.remove(jobId)
-
-        if (!transitionApplied) return
+        if (!ocrJobRepository.updateToFailed(jobId, ANALYSIS_FAILED_MESSAGE)) {
+            ocrJobNotifier.discard(jobId)
+            return
+        }
 
         ocrProgressManager.publishProgress(jobId, PipelineStep.FAILED, ANALYSIS_FAILED_MESSAGE)
-
-        if (!token.isNullOrEmpty()) {
-            notifier.notify(
-                token = token,
-                title = "복약 안내서 분석 실패",
-                body = ANALYSIS_FAILED_MESSAGE,
-                data = mapOf(
-                    "jobId" to jobId,
-                    "status" to "FAILED",
-                    "errorCode" to "N8N_PROCESSING_FAILED",
-                    "message" to ANALYSIS_FAILED_MESSAGE
-                )
-            )
-        }
+        ocrJobNotifier.notifyFailed(jobId, ANALYSIS_FAILED_MESSAGE, FailureCode.N8N_PROCESSING_FAILED)
     }
 
     companion object {

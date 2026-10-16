@@ -24,7 +24,6 @@ val guavaVersion: String by project
 val protobufVersion: String by project
 val grpcVersion: String by project
 val springdocVersion: String by project
-val ktorVersion: String by project
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
@@ -33,14 +32,10 @@ dependencies {
 
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core")
 
     implementation("com.google.firebase:firebase-admin:$firebaseAdminVersion")
 
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:$springdocVersion")
-
-    implementation("io.ktor:ktor-client-core:$ktorVersion")
-    implementation("io.ktor:ktor-client-cio:$ktorVersion")
 
     kapt("org.springframework.boot:spring-boot-configuration-processor")
 
@@ -53,7 +48,6 @@ dependencies {
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
-    testImplementation("io.ktor:ktor-client-mock:$ktorVersion")
 }
 
 configurations.all {

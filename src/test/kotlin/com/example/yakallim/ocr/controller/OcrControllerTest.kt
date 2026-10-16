@@ -2,7 +2,7 @@ package com.example.yakallim.ocr.controller
 
 import com.example.yakallim.ocr.dto.N8nCallbackRequest
 import com.example.yakallim.ocr.dto.OcrJobResponse
-import com.example.yakallim.ocr.infrastructure.N8nOcrClient
+import com.example.yakallim.ocr.service.OcrJobDispatcher
 import com.example.yakallim.ocr.model.JobStatus
 import com.example.yakallim.ocr.repository.OcrJobRepository
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -34,7 +34,7 @@ class OcrControllerTest {
 
     // 실제 n8n으로 전송하지 않도록 막아, 작업이 콜백을 기다리는 상태로 남게 한다.
     @MockitoBean
-    private lateinit var n8nOcrClient: N8nOcrClient
+    private lateinit var ocrJobDispatcher: OcrJobDispatcher
 
     @Test
     @DisplayName("진행 중인 OCR 작업을 취소하면 상태가 CANCELLED로 변경된다")

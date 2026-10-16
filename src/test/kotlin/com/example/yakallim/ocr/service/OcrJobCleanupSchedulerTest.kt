@@ -1,5 +1,6 @@
 package com.example.yakallim.ocr.service
 
+import com.example.yakallim.ocr.model.FailureCode
 import com.example.yakallim.ocr.model.JobStatus
 import com.example.yakallim.ocr.repository.InMemoryOcrJobRepository
 import com.example.yakallim.ocr.repository.MutableClock
@@ -18,20 +19,20 @@ class OcrJobCleanupSchedulerTest {
     private lateinit var clock: MutableClock
     private lateinit var ocrJobRepository: InMemoryOcrJobRepository
     private lateinit var ocrProgressManager: OcrProgressManager
-    private lateinit var ocrService: OcrService
+    private lateinit var ocrJobNotifier: OcrJobNotifier
 
     @BeforeEach
     fun setUp() {
         clock = MutableClock(Instant.parse("2026-01-01T00:00:00Z"))
         ocrJobRepository = InMemoryOcrJobRepository(clock)
         ocrProgressManager = OcrProgressManager(ocrJobRepository)
-        ocrService = mock()
+        ocrJobNotifier = mock()
     }
 
     private fun buildScheduler(retentionMinutes: Long = 60, timeoutMinutes: Long = 15) = OcrJobCleanupScheduler(
         ocrJobRepository = ocrJobRepository,
         ocrProgressManager = ocrProgressManager,
-        ocrService = ocrService,
+        ocrJobNotifier = ocrJobNotifier,
         clock = clock,
         retentionMinutes = retentionMinutes,
         processingTimeoutMinutes = timeoutMinutes
@@ -96,6 +97,6 @@ class OcrJobCleanupSchedulerTest {
 
         buildScheduler(timeoutMinutes = 15).cleanup()
 
-        verify(ocrService).handleTimeout("job-1", "처리 시간이 초과되었습니다.")
+        verify(ocrJobNotifier).notifyFailed("job-1", "처리 시간이 초과되었습니다.", FailureCode.OCR_PROCESSING_TIMEOUT)
     }
 }
