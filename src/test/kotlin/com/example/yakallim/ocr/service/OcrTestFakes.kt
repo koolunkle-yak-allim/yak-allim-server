@@ -5,6 +5,7 @@ import com.example.yakallim.ocr.dto.OcrJobResponse
 import com.example.yakallim.ocr.dto.OcrResponse
 import com.example.yakallim.ocr.model.JobStatus
 import com.example.yakallim.ocr.repository.OcrJobRepository
+import java.time.Instant
 
 internal class FakeOcrJobRepository : OcrJobRepository {
     var failedCalled = false
@@ -20,6 +21,8 @@ internal class FakeOcrJobRepository : OcrJobRepository {
     override fun updateToCancelled(jobId: String): Boolean = true
     override fun getJob(jobId: String): OcrJobResponse? = null
     override fun isCancelled(jobId: String): Boolean = false
+    override fun findJobIdsInStatusUpdatedBefore(statuses: Set<JobStatus>, cutoff: Instant): List<String> = emptyList()
+    override fun deleteJob(jobId: String) {}
 }
 
 internal class NoOpPushNotificationClient : PushNotificationClient {

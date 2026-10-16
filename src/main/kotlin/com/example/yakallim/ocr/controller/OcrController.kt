@@ -80,19 +80,17 @@ class OcrController(
         @Valid @RequestBody request: N8nCallbackRequest,
         @RequestHeader("X-N8N-Secret", required = false) webhookSecret: String?
     ): ResponseEntity<Unit> {
-        // Validate webhook secret
         val configuredSecret = ocrProperties.n8n.webhookSecret.trim()
         val receivedSecret = webhookSecret?.trim() ?: ""
         val isSecretValid = MessageDigest.isEqual(
             configuredSecret.toByteArray(),
             receivedSecret.toByteArray()
         )
-        if (configuredSecret.isNotBlank() && !isSecretValid) {
+        if (!isSecretValid) {
             log.warn("Webhook secret verification failed: unauthorized request")
             throw OcrException.UnauthorizedWebhookException()
         }
 
-        // Validate jobId matches between path and body
         if (request.jobId != jobId) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).build()
         }

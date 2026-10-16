@@ -2,7 +2,7 @@ package com.example.yakallim.ocr.service
 
 import com.example.yakallim.ocr.model.JobStatus
 import com.example.yakallim.ocr.model.PipelineStep
-import com.example.yakallim.ocr.repository.InMemoryOcrJobRepository
+import com.example.yakallim.ocr.repository.OcrJobRepository
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
@@ -14,7 +14,7 @@ private const val PROCESSING_TIMEOUT_MESSAGE = "처리 시간이 초과되었습
 
 @Component
 class OcrJobCleanupScheduler(
-    private val ocrJobRepository: InMemoryOcrJobRepository,
+    private val ocrJobRepository: OcrJobRepository,
     private val ocrProgressManager: OcrProgressManager,
     private val ocrService: OcrService,
     private val clock: Clock,
