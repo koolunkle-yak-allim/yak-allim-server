@@ -2,6 +2,7 @@ package com.example.yakallim.ocr.service
 
 import com.example.yakallim.ocr.infrastructure.N8nOcrClient
 import com.example.yakallim.ocr.model.FailureCode
+import com.example.yakallim.ocr.model.JobStatus
 import com.example.yakallim.ocr.model.PipelineStep
 import com.example.yakallim.ocr.repository.OcrJobRepository
 import org.slf4j.LoggerFactory
@@ -23,15 +24,21 @@ class OcrJobDispatcher(
     @Async("ocrTaskExecutor")
     fun dispatch(jobId: String, image: Path) {
         try {
-            // 대기열에 있는 동안 취소된 작업은 외부 OCR·LLM 비용이 들지 않도록 전송하지 않는다.
-            if (ocrJobRepository.isCancelled(jobId)) {
-                log.info("Skipping n8n dispatch for cancelled job: jobId='{}'", jobId)
+            // 콜백이 오지 않을 때 처리 시간 초과(OcrJobCleanupScheduler)가 동작하려면 PROCESSING으로 전이돼야 한다.
+            // 대기열에 있는 동안 취소된 작업은 전이가 거부되므로, 외부 OCR·LLM 비용이 들지 않도록 전송하지 않는다.
+            if (!ocrJobRepository.updateToProcessing(jobId)) {
+                log.info("Skipping n8n dispatch for job that is no longer active: jobId='{}'", jobId)
                 return
             }
 
-            // 콜백이 오지 않을 때 처리 시간 초과(OcrJobCleanupScheduler)가 동작하려면 PROCESSING으로 전이돼야 한다.
-            ocrJobRepository.updateToProcessing(jobId)
             n8nOcrClient.send(jobId, image)
+
+            // 전송하는 동안 취소되거나 콜백이 먼저 도착했으면 ANALYZING을 발행하지 않는다.
+            // 종료 뒤에 발행하면 종료 이벤트보다 늦게 나가고, 진행 상태 캐시에도 지워지지 않는 항목이 남는다.
+            if (ocrJobRepository.getJob(jobId)?.status != JobStatus.PROCESSING) {
+                log.info("Job finished while sending to n8n, skipping ANALYZING: jobId='{}'", jobId)
+                return
+            }
             ocrProgressManager.publishProgress(jobId, PipelineStep.ANALYZING)
         } catch (e: Exception) {
             log.error("Failed to send image to n8n: jobId='{}'", jobId, e)

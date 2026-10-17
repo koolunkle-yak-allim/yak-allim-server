@@ -135,12 +135,14 @@ class OcrService(
 
     /** n8n 워크플로우가 분석 실패를 콜백으로 알린 경우. 원인은 로그에만 남기고 사용자에게는 일반 메시지를 보낸다. */
     private fun handleFailure(jobId: String, reason: String?) {
-        log.warn("n8n reported analysis failure: jobId='{}', reason='{}'", jobId, reason)
-
+        // 취소 뒤에 늦게 도착한 실패는 정상 흐름이므로, 성공 콜백과 같이 INFO로만 남긴다.
         if (!ocrJobRepository.updateToFailed(jobId, ANALYSIS_FAILED_MESSAGE)) {
             ocrJobNotifier.discard(jobId)
+            log.info("Ignoring n8n failure callback for job that is no longer active: jobId='{}', reason='{}'", jobId, reason)
             return
         }
+
+        log.warn("n8n reported analysis failure: jobId='{}', reason='{}'", jobId, reason)
 
         ocrProgressManager.publishProgress(jobId, PipelineStep.FAILED, ANALYSIS_FAILED_MESSAGE)
         ocrJobNotifier.notifyFailed(jobId, ANALYSIS_FAILED_MESSAGE, FailureCode.N8N_PROCESSING_FAILED)
