@@ -1,5 +1,6 @@
 package com.example.yakallim.ocr.repository
 
+import com.example.yakallim.ocr.dto.OcrResult
 import com.example.yakallim.ocr.model.JobStatus
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -85,6 +86,28 @@ class InMemoryOcrJobRepositoryTest {
         assertFalse(repository.updateToFailed("job-1", "시간 초과"))
         assertFalse(repository.updateToProcessing("job-1"))
         assertEquals(JobStatus.CANCELLED, repository.getJob("job-1")?.status)
+    }
+
+    @Test
+    @DisplayName("취소된 작업에는 늦게 도착한 완료 결과가 반영되지 않는다")
+    fun cancelledJobIgnoresLateCompletion() {
+        repository.registerJob("job-1")
+        repository.updateToCancelled("job-1")
+
+        assertFalse(repository.updateToCompleted("job-1", OcrResult(message = "ok")))
+        assertEquals(JobStatus.CANCELLED, repository.getJob("job-1")?.status)
+        assertNull(repository.getJob("job-1")?.result)
+    }
+
+    @Test
+    @DisplayName("이미 실패한 작업은 완료로 바뀌지 않는다")
+    fun failedJobIsNotCompleted() {
+        repository.registerJob("job-1")
+        repository.updateToFailed("job-1", "이미 실패함")
+
+        assertFalse(repository.updateToCompleted("job-1", OcrResult(message = "ok")))
+        assertEquals(JobStatus.FAILED, repository.getJob("job-1")?.status)
+        assertNull(repository.getJob("job-1")?.result)
     }
 
     @Test
