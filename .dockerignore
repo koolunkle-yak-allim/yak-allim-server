@@ -1,6 +1,3 @@
-.git
-.gradle
-deploy
-.idea
-*.log
+# 이미지에는 빌드된 JAR만 들어가므로, 나머지는 빌드 컨텍스트에서 모두 뺀다.
+*
 !build/libs/*.jar

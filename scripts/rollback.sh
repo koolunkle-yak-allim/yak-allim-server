@@ -20,6 +20,8 @@ IMAGE_NAME="${IMAGE_REPOSITORY}:${ROLLBACK_TAG}"
 N8N_WEBHOOK_URL="${N8N_WEBHOOK_URL:-http://yak-allim-n8n:5678/webhook/ocr}"
 OLD_CONTAINER_DRAIN_WAIT_SECONDS="${OLD_CONTAINER_DRAIN_WAIT_SECONDS:-30}"
 OLD_CONTAINER_STOP_TIMEOUT_SECONDS="${OLD_CONTAINER_STOP_TIMEOUT_SECONDS:-70}"
+# Dockerfile의 app 사용자 UID
+APP_UID="${APP_UID:-10001}"
 
 if ! docker image inspect "${IMAGE_NAME}" >/dev/null 2>&1; then
     echo "오류: 로컬에 ${IMAGE_NAME} 이미지가 없습니다. (deploy.sh의 이미지 정리 주기에 의해 이미 삭제되었을 수 있습니다)" >&2
@@ -62,8 +64,10 @@ docker create \
     --notification.firebase.key-path="file:/app/yak-allim-firebase-key.json" \
     --ocr.n8n.webhook-url="${N8N_WEBHOOK_URL}"
 
+# 앱은 비root 사용자(APP_UID)로 실행되므로, 키 파일 소유자를 맞춰 권한(0400)을 유지한 채 복사한다.
 if [ -f "${DEPLOY_DIR}/yak-allim-firebase-key.json" ]; then
-    docker cp "${DEPLOY_DIR}/yak-allim-firebase-key.json" "${TARGET_NAME}:/app/yak-allim-firebase-key.json"
+    chown "${APP_UID}:${APP_UID}" "${DEPLOY_DIR}/yak-allim-firebase-key.json"
+    docker cp -a "${DEPLOY_DIR}/yak-allim-firebase-key.json" "${TARGET_NAME}:/app/yak-allim-firebase-key.json"
 fi
 
 docker start "${TARGET_NAME}"
@@ -103,8 +107,6 @@ docker logs --tail 25 "${TARGET_NAME}"
 
 # 4. Nginx 포트 스위칭
 echo "=== Nginx 포트 스위칭 (Target: ${TARGET_NAME} / Port: ${TARGET_PORT}) 진행 ==="
-mkdir -p "${DEPLOY_DIR}"
-printf 'set \x24service_url http://%s:8081;\n' "${TARGET_NAME}" > "${DEPLOY_DIR}/service-url.inc"
 docker exec yak-allim-nginx sh -c "printf 'set \x24service_url http://%s:8081;\n' ${TARGET_NAME} > /etc/nginx/conf.d/service-url.inc"
 docker exec yak-allim-nginx nginx -s reload
 
