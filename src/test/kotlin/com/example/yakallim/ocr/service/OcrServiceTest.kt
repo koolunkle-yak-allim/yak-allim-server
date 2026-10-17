@@ -110,6 +110,19 @@ class OcrServiceTest {
     }
 
     @Test
+    @DisplayName("이미 취소된 작업에 실패 콜백이 도착하면 FAILED로 바꾸지 않고 알림도 보내지 않는다")
+    fun ignoresFailureCallbackForCancelledJob() {
+        val jobId = enqueue()
+        service.cancelJob(jobId)
+
+        service.handleCallback(N8nCallbackRequest(jobId = jobId, status = "FAILED", error = "약품 정보를 추출하지 못함"))
+
+        assertEquals(JobStatus.CANCELLED, ocrJobRepository.getJob(jobId)?.status)
+        verify(ocrProgressManager, never()).publishProgress(eq(jobId), eq(PipelineStep.FAILED), anyOrNull(), anyOrNull())
+        verifyNoInteractions(notifier)
+    }
+
+    @Test
     @DisplayName("작업을 취소하면 CANCELLED 진행 이벤트를 발행한다")
     fun publishesCancelledEventOnCancel() {
         val jobId = enqueue()

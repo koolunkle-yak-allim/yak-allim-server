@@ -15,6 +15,7 @@ import org.junit.jupiter.api.io.TempDir
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -99,6 +100,21 @@ class OcrJobDispatcherTest {
         dispatcher.dispatch("job-1", image)
 
         verifyNoInteractions(n8nOcrClient, ocrProgressManager, pushNotificationClient)
+        assertEquals(JobStatus.CANCELLED, ocrJobRepository.getJob("job-1")?.status)
+        assertFalse(Files.exists(image))
+    }
+
+    @Test
+    @DisplayName("n8n으로 전송하는 동안 취소된 작업에는 ANALYZING을 발행하지 않는다")
+    fun skipsAnalyzing_whenJobCancelledWhileSending() {
+        val image = image()
+        doAnswer { ocrJobRepository.updateToCancelled("job-1") }
+            .whenever(n8nOcrClient).send(any(), any())
+
+        dispatcher.dispatch("job-1", image)
+
+        verify(n8nOcrClient).send("job-1", image)
+        verifyNoInteractions(ocrProgressManager, pushNotificationClient)
         assertEquals(JobStatus.CANCELLED, ocrJobRepository.getJob("job-1")?.status)
         assertFalse(Files.exists(image))
     }
