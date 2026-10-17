@@ -1,9 +1,11 @@
 name: "CodeQL Security Analysis"
 
-# 1. 트리거 조건: main 반영 시, 정기 실행, 수동 실행
-# PR마다 돌리면 CI보다 오래 걸려 리뷰가 늦어지므로, 머지 후와 주 1회만 분석한다.
+# 1. 트리거 조건: main 대상 PR·push, 정기 실행, 수동 실행
+# main 브랜치 보호 규칙이 이 분석(Analyze)을 필수 체크로 요구하므로 PR에서도 실행한다.
 on:
   push:
+    branches: [ "main" ]
+  pull_request:
     branches: [ "main" ]
   workflow_dispatch:
   schedule:
