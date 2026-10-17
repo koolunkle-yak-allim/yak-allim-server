@@ -17,7 +17,7 @@ Base path: `/api/v1/ocr`
 
 | Method | Path                     | 요청                                                                  | 응답                                                     | 비고                          |
 |--------|--------------------------|---------------------------------------------------------------------|--------------------------------------------------------|-----------------------------|
-| POST   | `/enqueue`               | `multipart/form-data`: `file`(필수, jpg/png/gif/webp), `fcmToken`(선택) | `202 Accepted` + `OcrJobResponse` / `400` / `413` / `503` | 작업을 등록하고 즉시 반환, 처리는 비동기     |
+| POST   | `/enqueue`               | `multipart/form-data`: `file`(필수, jpg/jpeg/png), `fcmToken`(선택) | `202 Accepted` + `OcrJobResponse` / `400` / `413` / `503` | 작업을 등록하고 즉시 반환, 처리는 비동기     |
 | GET    | `/jobs/{jobId}`          | -                                                                   | `200 OK` + `OcrJobResponse` / `404 Not Found`          | 작업 현재 상태 조회                 |
 | GET    | `/jobs/{jobId}/progress` | -                                                                   | `200 OK`, `text/event-stream`                          | 아래 [SSE 이벤트](#sse-이벤트) 참고   |
 | POST   | `/jobs/{jobId}/cancel`   | -                                                                   | `204 No Content` / `400 Bad Request` / `404 Not Found` | 진행 중인 작업 취소. 이미 종료된 작업은 400 |

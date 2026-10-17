@@ -50,11 +50,11 @@ class OcrService(
             .replace(EXTENSION_REGEX, "")
             .lowercase()
 
+        // n8n의 Upstage OCR이 지원하는 이미지 형식만 받는다. gif는 Upstage가 415로 거부하고,
+        // webp는 공식 지원 형식이 아니어서, 받아 두면 분석 단계에서야 실패로 끝난다.
         val safeExtension = when (extension) {
             "jpg", "jpeg" -> "jpg"
             "png" -> "png"
-            "gif" -> "gif"
-            "webp" -> "webp"
             else -> throw OcrException.InvalidFileExtensionException("허용되지 않는 파일 확장자입니다: $extension")
         }
         val uniqueFileName = "${UUID.randomUUID()}.$safeExtension"
