@@ -30,19 +30,15 @@ pipeline {
             steps {
                 script {
                     def cleanOption = params.CLEAN_BUILD ? 'clean' : ''
-                    if (isUnix()) {
-                        sh 'chmod +x gradlew'
-                        sh """
-                            docker run --rm \
-                                --volumes-from yak-allim-jenkins \
-                                -v yak-allim-server-gradle-cache:/root/.gradle \
-                                -w "${env.WORKSPACE}" \
-                                eclipse-temurin:17-jdk-jammy \
-                                sh -c "./gradlew ${cleanOption} bootJar"
-                        """
-                    } else {
-                        bat "gradlew.bat ${cleanOption} bootJar"
-                    }
+                    sh 'chmod +x gradlew'
+                    sh """
+                        docker run --rm \
+                            --volumes-from yak-allim-jenkins \
+                            -v yak-allim-server-gradle-cache:/root/.gradle \
+                            -w "${env.WORKSPACE}" \
+                            eclipse-temurin:17-jdk-jammy \
+                            sh -c "./gradlew ${cleanOption} bootJar"
+                    """
                 }
             }
         }
@@ -53,14 +49,8 @@ pipeline {
                     file(credentialsId: 'firebase-messaging-key', variable: 'FIREBASE_KEY_FILE'),
                     string(credentialsId: 'ocr-n8n-webhook-secret', variable: 'OCR_N8N_WEBHOOK_SECRET')
                 ]) {
-                    script {
-                        if (isUnix()) {
-                            sh 'chmod +x scripts/deploy.sh'
-                            sh './scripts/deploy.sh'
-                        } else {
-                            powershell './scripts/deploy.ps1'
-                        }
-                    }
+                    sh 'chmod +x scripts/deploy.sh'
+                    sh './scripts/deploy.sh'
                 }
             }
         }

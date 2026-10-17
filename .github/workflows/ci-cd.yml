@@ -2,9 +2,9 @@ name: Java CI/CD with Gradle and Jenkins
 
 on:
   push:
-    branches: [ "main", "develop" ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ "main", "develop" ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 permissions:
@@ -16,10 +16,10 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v7
 
     - name: Set up JDK 17
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         java-version: '17'
         distribution: 'temurin'
@@ -36,6 +36,15 @@ jobs:
     - name: Generate Job Summary
       if: always()
       run: |
+        # 테스트 결과 XML에서 실제 개수를 집계한다. 빌드가 테스트 전에 실패하면 결과 파일이 없다.
+        shopt -s nullglob
+        reports=(build/test-results/test/*.xml)
+        count() { grep -ho " $1=\"[0-9]*\"" "${reports[@]}" | grep -o '[0-9]*' | awk '{ s += $1 } END { print s + 0 }'; }
+        if [ ${#reports[@]} -eq 0 ]; then
+          tests="Not run"
+        else
+          tests="$(count tests) run, $(count failures) failed, $(count errors) errors, $(count skipped) skipped"
+        fi
         echo "### CI/CD Job Summary" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "| Property | Detail |" >> $GITHUB_STEP_SUMMARY
@@ -44,9 +53,7 @@ jobs:
         echo "| **Trigger Event** | \`${{ github.event_name }}\` |" >> $GITHUB_STEP_SUMMARY
         echo "| **Branch** | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
         echo "| **Status** | ${{ job.status }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| **Tests** | Executed |" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "> **Note:** All tests were successfully executed using a mock test environment (bypassing external dependencies like the n8n webhook and Firebase keys)." >> $GITHUB_STEP_SUMMARY
+        echo "| **Tests** | ${tests} |" >> $GITHUB_STEP_SUMMARY
 
   trigger-jenkins:
     needs: build

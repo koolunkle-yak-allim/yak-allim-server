@@ -11,6 +11,8 @@ N8N_WEBHOOK_URL="${N8N_WEBHOOK_URL:-http://yak-allim-n8n:5678/webhook/ocr}"
 # 전환 직후 곧바로 종료하지 않고, 처리 중이던 요청이 끝날 시간을 준 뒤 graceful stop 함.
 OLD_CONTAINER_DRAIN_WAIT_SECONDS="${OLD_CONTAINER_DRAIN_WAIT_SECONDS:-30}"
 OLD_CONTAINER_STOP_TIMEOUT_SECONDS="${OLD_CONTAINER_STOP_TIMEOUT_SECONDS:-70}"
+# Dockerfile의 app 사용자 UID
+APP_UID="${APP_UID:-10001}"
 
 # 1. 배포 디렉터리 생성 및 키 준비
 mkdir -p "${DEPLOY_DIR}"
@@ -71,8 +73,10 @@ docker create \
     --notification.firebase.key-path="file:/app/yak-allim-firebase-key.json" \
     --ocr.n8n.webhook-url="${N8N_WEBHOOK_URL}"
 
+# 앱은 비root 사용자(APP_UID)로 실행되므로, 키 파일 소유자를 맞춰 권한(0400)을 유지한 채 복사한다.
 if [ -f "${DEPLOY_DIR}/yak-allim-firebase-key.json" ]; then
-    docker cp "${DEPLOY_DIR}/yak-allim-firebase-key.json" "${TARGET_NAME}:/app/yak-allim-firebase-key.json"
+    chown "${APP_UID}:${APP_UID}" "${DEPLOY_DIR}/yak-allim-firebase-key.json"
+    docker cp -a "${DEPLOY_DIR}/yak-allim-firebase-key.json" "${TARGET_NAME}:/app/yak-allim-firebase-key.json"
 fi
 
 docker start "${TARGET_NAME}"
@@ -106,8 +110,6 @@ if [ "$HEALTH_SUCCESS" = "true" ]; then
 
     # 7. Nginx 포트 스위칭
     echo "=== Nginx 포트 스위칭 (Target: ${TARGET_NAME} / Port: ${TARGET_PORT}) 진행 ==="
-    mkdir -p "${DEPLOY_DIR}"
-    printf 'set \x24service_url http://%s:8081;\n' "${TARGET_NAME}" > "${DEPLOY_DIR}/service-url.inc"
     docker exec yak-allim-nginx sh -c "printf 'set \x24service_url http://%s:8081;\n' ${TARGET_NAME} > /etc/nginx/conf.d/service-url.inc"
 
     echo "=== NGINX 설정 재설정 ==="
