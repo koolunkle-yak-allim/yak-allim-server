@@ -9,6 +9,8 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
 import org.springframework.boot.test.context.SpringBootTest
@@ -120,10 +122,10 @@ class OcrControllerTest {
         Assertions.assertEquals(JobStatus.FAILED, ocrJobRepository.getJob(jobId)?.status)
     }
 
-    @Test
-    @DisplayName("허용되지 않은 파일 확장자 업로드 시 BAD_REQUEST를 반환한다")
-    fun shouldRejectInvalidFileExtension() {
-        val invalidFilename = "test.exe"
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = ["test.exe", "test.gif", "test.webp", "test"])
+    @DisplayName("OCR이 지원하지 않는 파일 확장자 업로드 시 BAD_REQUEST를 반환한다")
+    fun shouldRejectInvalidFileExtension(invalidFilename: String) {
         val mockMultipartFile =
             MockMultipartFile("file", invalidFilename, MediaType.APPLICATION_OCTET_STREAM_VALUE, "test content".toByteArray())
 
