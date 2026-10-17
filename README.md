@@ -73,8 +73,12 @@ n8n 워크플로우와 실패 콜백 설정 방법은 [`yak-allim-infra`의 `n8n
 2. `src/main/resources/application.properties` 파일에서 n8n Webhook 주소를 지정합니다. 서버는 이미지를 이 주소로 전달하고, n8n 워크플로우가 분석 후 콜백(`POST /api/v1/ocr/n8n/callback/{jobId}`)합니다:
 
    ```properties
-   ocr.n8n.webhook-url=http://localhost:5678/webhook-test/ocr
+   ocr.n8n.webhook-url=${OCR_N8N_WEBHOOK_URL:http://localhost:5678/webhook/ocr}
    ```
+
+   기본값은 n8n에서 활성(Publish)된 워크플로우의 운영 webhook 주소입니다. 다른 주소를 쓰려면
+   `OCR_N8N_WEBHOOK_URL` 환경 변수로 덮어씁니다. 편집기에서 워크플로우를 단계별로 확인할 때만
+   `.../webhook-test/ocr`을 지정하세요. 이 주소는 "Listen for test event"를 누른 동안 요청을 한 번만 받습니다.
 
    `OCR_N8N_WEBHOOK_SECRET` 환경 변수가 반드시 필요합니다(비어 있으면 기동에 실패합니다).
    이 값은 서버 → n8n 요청에는 `X-N8N-WEBHOOK-SECRET` 헤더로, n8n → 서버 콜백에는 `X-N8N-Secret` 헤더로
