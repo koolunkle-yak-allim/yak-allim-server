@@ -79,9 +79,11 @@ class GlobalExceptionHandler {
         return errorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.")
     }
 
+    // 앱은 완료·실패·취소 후 SSE 연결을 스스로 닫으므로, 이후 쓰기가 실패하는 것은 정상 흐름이다.
+    // WARN으로 남기면 실제 문제와 구분하기 어려워 DEBUG로만 기록한다.
     @ExceptionHandler(AsyncRequestNotUsableException::class)
     fun handleAsyncRequestNotUsableException() {
-        log.warn("SSE stream unavailable due to client disconnect")
+        log.debug("SSE stream unavailable due to client disconnect")
     }
 
     private fun errorResponse(status: HttpStatus, message: String): ResponseEntity<ErrorResponse> =
