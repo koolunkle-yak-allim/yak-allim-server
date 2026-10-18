@@ -38,12 +38,12 @@
 ```text
 com.example.yakallim
 ├── global                 # 공통 전역 처리
-│   ├── config             # Swagger / OpenApi, CORS 등 전역 설정
+│   ├── config             # Swagger(OpenAPI), 시각(Clock) 등 전역 설정
 │   └── exception          # 전역 예외 처리(@RestControllerAdvice), 공통 BusinessException·ErrorResponse
 ├── notification            # 알림 발송
 │   ├── config              # FCM 설정
 │   ├── infrastructure      # Firebase FCM 구현체
-│   └── service              # NotificationClient 인터페이스
+│   └── service              # PushNotificationClient 인터페이스
 └── ocr                     # 복약 안내서 분석 작업 (핵심 도메인)
     ├── config              # n8n 연동 프로퍼티·HTTP 클라이언트, 비동기 실행기 설정
     ├── controller          # REST API 컨트롤러
@@ -106,7 +106,7 @@ n8n 워크플로우와 실패 콜백 설정 방법은 [`yak-allim-infra`의 `n8n
 현재 알려진 제약사항입니다. 각 항목은 순차적으로 개선할 계획입니다.
 
 - **약품명 검증 없음**: 서버는 LLM이 추출한 약품명을 교정하거나 공식 의약품 데이터와 대조하지 않고 그대로 전달합니다. 클라이언트에서 원본 사진과 함께 보여주고 사용자가 확인하도록 안내해야 합니다.
-- **작업 상태 영속성 없음**: 작업 상태가 메모리(`ConcurrentHashMap`)에만 저장되어 서버 재시작 시 모두 사라지고, 재시작 전에 보낸 요청의 n8n 콜백은 받을 곳이 없어집니다. n8n 콜백이 오지 않으면 처리 시간 초과(`ocr.job-processing-timeout-minutes`, 기본 15분) 시 자동으로 `FAILED` 처리됩니다.
+- **작업 상태 영속성 없음**: 작업 상태가 메모리(`ConcurrentHashMap`)에만 저장됩니다. 서버가 재시작되거나 블루-그린 배포로 컨테이너가 바뀌면 진행 중이던 작업이 사라지고, 그 작업의 n8n 콜백은 무시됩니다. 서버는 그대로인데 n8n 콜백만 오지 않는 경우에는 처리 시간 초과(`ocr.job-processing-timeout-minutes`, 기본 15분) 시 자동으로 `FAILED` 처리됩니다.
 - **n8n 의존성**: 분석 전체가 n8n 워크플로우와 그 뒤의 외부 OCR API·LLM에 의존합니다. n8n 워크플로우가 실패 콜백을 보내지 못하고 멈추면, 서버는 이를 처리 시간 초과로만 감지합니다. 처방전 이미지가 외부 서비스로 전송된다는 점도 유의해야 합니다.
 - **세부 진행률 없음**: 서버는 n8n 내부의 단계별 진행 상황을 알 수 없어, 분석 중에는 `ANALYZING` 단계 하나로만 표시합니다.
 - **비동기 실행기 큐 한도**: n8n 전송은 전용 스레드풀(`ocrTaskExecutor`, 동시 실행 2개·대기열 20개)을 쓰며, 큐가 가득 차면 업로드 파일을 정리하고 503으로 응답합니다. 다만 큐 크기(20)는 실측 없이 정한 추정치라, 실제 트래픽 패턴에 맞춰 재조정이 필요합니다.
