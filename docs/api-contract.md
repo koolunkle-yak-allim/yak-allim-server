@@ -2,7 +2,7 @@
 
 서버와 안드로이드 클라이언트가 공유하는 REST/SSE/FCM 계약을 정리합니다. 이 문서와 실제 코드가
 어긋나지 않도록, 서버 쪽은 `ApiContractTest`가 `PipelineStep` 값 목록과 주요 응답의 JSON 필드
-이름을 검증하고, 안드로이드 쪽은 `OcrMappersTest`(A1)로 목록 일치를 검증합니다.
+이름을 검증하고, 안드로이드 쪽은 `OcrMappersTest`로 목록 일치를 검증합니다.
 
 ## 처리 흐름
 
@@ -171,7 +171,7 @@ nginx를 거칠 때 10MB를 넘는 업로드는 nginx가 먼저 막아 HTML `413
 }
 ```
 
-실패(워크플로우의 Error Trigger 등에서 호출):
+실패(워크플로우의 `Spring Boot (실패)` 노드가 각 노드의 에러 출력이나 약품 추출 실패 시 호출):
 
 ```json
 {
