@@ -121,6 +121,9 @@ class OcrService(
             medicines = medicines
                 .map { it.copy(medicineName = it.medicineName.trim()) }
                 .filter { it.medicineName.isNotEmpty() }
+                // 복약안내문 옆 영수증 목록처럼 같은 줄이 반복되면 LLM이 그대로 옮길 수 있다.
+                // 이름·1회 양·횟수·일수가 모두 같은 항목만 합치고, 용법이 다른 항목은 남긴다.
+                .distinct()
         )
 
         if (!ocrJobRepository.updateToCompleted(jobId, result)) {

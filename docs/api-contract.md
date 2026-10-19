@@ -45,7 +45,8 @@ Base path: `/api/v1/ocr`
 ```
 
 - `result`는 `COMPLETED`일 때만 채워집니다.
-- `dosagePerTake`, `dailyFrequency`, `durationDays`는 n8n이 추출하지 못하면 `null`입니다.
+- `dosagePerTake`, `dailyFrequency`, `durationDays`는 사진에 해당 숫자가 없거나 n8n이 추출하지 못하면 `null`입니다. 클라이언트는 `null`을 "확인 필요"로 보여 주고 사용자가 직접 입력하게 해야 합니다.
+- 약품명과 세 값이 모두 같은 항목은 하나로 합쳐집니다(예: 영수증 쪽 목록의 반복 줄). 용법이 다른 같은 약은 따로 남습니다.
 - `medicineName`은 LLM 추출 결과를 그대로 전달합니다(앞뒤 공백만 정리). 서버는 약품명을 교정하지 않으므로, 클라이언트는 원본 사진과 함께 보여주고 사용자가 확인하도록 안내하는 것을 권장합니다.
 - `error`에는 내부 원인(HTTP 상태 코드, n8n 오류 등)이 아니라 사용자에게 그대로 보여줄 수 있는 메시지가 들어갑니다.
 
@@ -183,3 +184,4 @@ nginx를 거칠 때 10MB를 넘는 업로드는 nginx가 먼저 막아 HTML `413
 
 - `status`가 `FAILED`(대소문자 무관)이면 실패로, 그 외 값이거나 생략하면 성공으로 처리합니다.
 - `medicineName`이 비어 있는 항목은 결과에서 제외됩니다.
+- 약품명(앞뒤 공백 정리 후)·`dosagePerTake`·`dailyFrequency`·`durationDays`가 모두 같은 항목은 하나만 남깁니다. 순서는 처음 나온 순서를 따릅니다.

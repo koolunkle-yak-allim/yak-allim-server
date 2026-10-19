@@ -80,6 +80,28 @@ class OcrServiceTest {
     }
 
     @Test
+    @DisplayName("성공 콜백에서 이름과 복용법이 모두 같은 항목은 하나로 합치고, 용법이 다른 항목은 남긴다")
+    fun mergesOnlyIdenticalMedicineRows() {
+        val jobId = enqueue()
+        val sameRow = PrescribedMedicine(medicineName = "루리드정", dosagePerTake = "1정", dailyFrequency = 1, durationDays = 14)
+        val medicines = listOf(
+            sameRow,
+            PrescribedMedicine(medicineName = "애니코프캡슐300mg", dosagePerTake = "1캡슐", dailyFrequency = 6, durationDays = 3),
+            sameRow.copy(medicineName = " 루리드정 "),
+            PrescribedMedicine(medicineName = "애니코프캡슐300mg", dosagePerTake = "2캡슐", dailyFrequency = 2, durationDays = 14),
+            sameRow
+        )
+
+        service.handleCallback(N8nCallbackRequest(jobId = jobId, status = "COMPLETED", data = N8nCallbackData(medicines)))
+
+        val result = ocrJobRepository.getJob(jobId)?.result?.medicines.orEmpty()
+        assertEquals(
+            listOf("루리드정" to "1정", "애니코프캡슐300mg" to "1캡슐", "애니코프캡슐300mg" to "2캡슐"),
+            result.map { it.medicineName to it.dosagePerTake }
+        )
+    }
+
+    @Test
     @DisplayName("실패 콜백은 FAILED로 전이하고 N8N_PROCESSING_FAILED 알림을 보내며, n8n의 원인 메시지는 노출하지 않는다")
     fun failsJobOnFailureCallback() {
         val jobId = enqueue()
