@@ -47,9 +47,9 @@ class OcrJobDispatcherTest {
         ocrProgressManager = mock()
         n8nOcrClient = mock()
         pushNotificationClient = mock()
-        val notifier = OcrJobNotifier(pushNotificationClient).apply { register("job-1", "token-1") }
-        dispatcher = OcrJobDispatcher(ocrJobRepository, ocrProgressManager, n8nOcrClient, notifier)
         ocrJobRepository.registerJob("job-1")
+        val notifier = OcrJobNotifier(pushNotificationClient, ocrJobRepository).apply { register("job-1", "token-1") }
+        dispatcher = OcrJobDispatcher(ocrJobRepository, ocrProgressManager, n8nOcrClient, notifier)
     }
 
     private fun image(): Path = Files.write(tempDir.resolve("upload.jpg"), byteArrayOf(1, 2, 3))

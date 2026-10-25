@@ -13,6 +13,7 @@
 - **n8n Workflow Integration**: 업로드된 이미지를 n8n Webhook으로 전달하고, n8n 워크플로우가 외부 OCR API와 LLM으로 추출한 복약 정보를 콜백(`POST /api/v1/ocr/n8n/callback/{jobId}`)으로 받습니다. 양방향 요청은 공유 secret으로 인증합니다.
 - **Asynchronous Job Management**: 요청 수신 시 작업 ID와 함께 Accepted(202)를 즉시 반환하고, 작업 상태 조회·취소·처리 시간 초과·SSE 진행률 스트림을 제공합니다.
 - **FCM Notification**: 분석 작업이 완료되거나 실패했을 때 Firebase Cloud Messaging(FCM)을 통해 클라이언트에 알림을 전송합니다.
+- **Job State in Redis**: 운영에서는 작업 상태·결과·FCM 토큰을 Redis에 두어, 재배포나 블루-그린 전환 중에도 진행 중인 작업이 이어집니다. 진행 이벤트는 Redis Pub/Sub로 모든 서버 인스턴스의 SSE에 전달합니다.
 
 ---
 
@@ -23,8 +24,9 @@
 - **Libraries**:
   - Firebase Admin SDK 9.2.0
   - Spring RestClient (n8n Webhook 전송)
+  - Spring Data Redis (작업 상태 저장소, 진행 이벤트 Pub/Sub)
   - SpringDoc OpenAPI(Swagger UI)
-- **Testing**: JUnit 5, Mockito-Kotlin
+- **Testing**: JUnit 5, Mockito-Kotlin, Testcontainers(Redis)
 - **Build**: Gradle (Kotlin DSL)
 
 ---
@@ -51,8 +53,8 @@ com.example.yakallim
     ├── exception           # OCR 도메인 전용 예외
     ├── infrastructure      # n8n Webhook 전송 클라이언트(N8nOcrClient)
     ├── model               # OCR 도메인 모델(PipelineStep, PrescribedMedicine 등)
-    ├── repository          # 작업 상태 저장소(InMemoryOcrJobRepository)
-    └── service             # 작업 접수·콜백 처리, n8n 비동기 전송, FCM 알림, 진행률 SSE, 정리 스케줄러
+    ├── repository          # 작업 상태 저장소(운영 RedisOcrJobRepository, 로컬 InMemoryOcrJobRepository)
+    └── service             # 작업 접수·콜백 처리, n8n 비동기 전송, FCM 알림, 진행률 SSE·이벤트 버스, 정리 스케줄러
 ```
 
 API 엔드포인트·SSE 이벤트·FCM 페이로드·n8n 콜백 등 서버-클라이언트 계약은 [`docs/api-contract.md`](docs/api-contract.md)에 별도로 정리되어 있습니다.
@@ -65,6 +67,7 @@ n8n 워크플로우와 실패 콜백 설정 방법은 [`yak-allim-infra`의 `n8n
 ### Prerequisites
 
 - **JDK**: Java 17
+- **Docker**: 테스트 중 Redis 관련 테스트가 Testcontainers로 Redis를 띄웁니다. 로컬 실행(`bootRun`)에는 필요 없습니다.
 - **External Keys**: Firebase Admin SDK 비공개 키 JSON 파일 (`yak-allim-firebase-key.json`)
 
 ### Configuration
@@ -83,6 +86,15 @@ n8n 워크플로우와 실패 콜백 설정 방법은 [`yak-allim-infra`의 `n8n
    `OCR_N8N_WEBHOOK_SECRET` 환경 변수가 반드시 필요합니다(비어 있으면 기동에 실패합니다).
    이 값은 서버 → n8n 요청에는 `X-N8N-WEBHOOK-SECRET` 헤더로, n8n → 서버 콜백에는 `X-N8N-Secret` 헤더로
    전달됩니다(양방향 헤더 이름이 다르니 n8n 워크플로우 설정 시 유의하세요).
+
+3. 작업 상태 저장소는 `ocr.job-store`로 고릅니다.
+
+   | 값 | 저장 위치 | 쓰는 곳 |
+   | --- | --- | --- |
+   | `memory` (기본값) | 서버 메모리. 서버를 다시 시작하면 작업이 사라짐 | 로컬 실행, 테스트 |
+   | `redis` | `spring.data.redis.host`의 Redis | 운영 배포(`scripts/deploy.sh`가 `yak-allim-redis`로 지정하고 Redis 헬스체크를 켬) |
+
+   운영 Redis는 `yak-allim-infra`의 `docker-compose.yml`에 있으며, 서버를 배포하기 전에 떠 있어야 합니다.
 
 ### Installation & Build
 
@@ -106,7 +118,7 @@ n8n 워크플로우와 실패 콜백 설정 방법은 [`yak-allim-infra`의 `n8n
 현재 알려진 제약사항입니다. 각 항목은 순차적으로 개선할 계획입니다.
 
 - **약품명 검증 없음**: 서버는 LLM이 추출한 약품명을 교정하거나 공식 의약품 데이터와 대조하지 않고 그대로 전달합니다. 클라이언트에서 원본 사진과 함께 보여주고 사용자가 확인하도록 안내해야 합니다.
-- **작업 상태 영속성 없음**: 작업 상태가 메모리(`ConcurrentHashMap`)에만 저장됩니다. 서버가 재시작되거나 블루-그린 배포로 컨테이너가 바뀌면 진행 중이던 작업이 사라지고, 그 작업의 n8n 콜백은 무시됩니다. 서버는 그대로인데 n8n 콜백만 오지 않는 경우에는 처리 시간 초과(`ocr.job-processing-timeout-minutes`, 기본 15분) 시 자동으로 `FAILED` 처리됩니다.
+- **Redis를 다시 시작하면 작업이 사라짐**: 복약 결과를 디스크에 남기지 않도록 Redis는 디스크에 쓰지 않습니다. 서버 재배포·블루-그린 전환에는 작업이 남지만, Redis 컨테이너를 다시 시작하면 진행 중인 작업이 사라지고 앱은 404를 받아 다시 시도하게 됩니다. n8n 콜백이 오지 않으면 처리 시간 초과(`ocr.job-processing-timeout-minutes`, 기본 15분), n8n으로 보내기 전에 서버가 내려가 대기열에 남은 작업은 대기 시간 초과(`ocr.job-accepted-timeout-minutes`, 기본 5분)로 `FAILED` 처리됩니다.
 - **n8n 의존성**: 분석 전체가 n8n 워크플로우와 그 뒤의 외부 OCR API·LLM에 의존합니다. n8n 워크플로우가 실패 콜백을 보내지 못하고 멈추면, 서버는 이를 처리 시간 초과로만 감지합니다. 처방전 이미지가 외부 서비스로 전송된다는 점도 유의해야 합니다.
 - **세부 진행률 없음**: 서버는 n8n 내부의 단계별 진행 상황을 알 수 없어, 분석 중에는 `ANALYZING` 단계 하나로만 표시합니다.
 - **비동기 실행기 큐 한도**: n8n 전송은 전용 스레드풀(`ocrTaskExecutor`, 동시 실행 2개·대기열 20개)을 쓰며, 큐가 가득 차면 업로드 파일을 정리하고 503으로 응답합니다. 다만 큐 크기(20)는 실측 없이 정한 추정치라, 실제 트래픽 패턴에 맞춰 재조정이 필요합니다.

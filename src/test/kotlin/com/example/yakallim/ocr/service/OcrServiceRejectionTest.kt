@@ -26,7 +26,7 @@ class OcrServiceRejectionTest {
     @DisplayName("실행기가 작업을 거절하면 업로드 파일을 지우고 작업을 실패 처리한 뒤 503을 던진다")
     fun cleansUpAndReturns503WhenExecutorRejectsTask() {
         val ocrJobRepository = FakeOcrJobRepository()
-        val ocrProgressManager = OcrProgressManager(ocrJobRepository)
+        val ocrProgressManager = OcrProgressManager(ocrJobRepository, InMemoryProgressEventBus())
         val rejectingDispatcher = mock<OcrJobDispatcher> {
             on { dispatch(any(), any()) } doThrow TaskRejectedException("executor queue is full")
         }
@@ -34,7 +34,7 @@ class OcrServiceRejectionTest {
             ocrJobRepository = ocrJobRepository,
             ocrProgressManager = ocrProgressManager,
             ocrJobDispatcher = rejectingDispatcher,
-            ocrJobNotifier = OcrJobNotifier(NoOpPushNotificationClient()),
+            ocrJobNotifier = OcrJobNotifier(NoOpPushNotificationClient(), ocrJobRepository),
             uploadDirStr = uploadDir.toString()
         )
         val file = MockMultipartFile("file", "test.jpg", "image/jpeg", "content".toByteArray())

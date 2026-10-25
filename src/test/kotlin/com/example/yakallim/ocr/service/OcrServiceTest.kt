@@ -48,7 +48,7 @@ class OcrServiceTest {
             ocrJobRepository = ocrJobRepository,
             ocrProgressManager = ocrProgressManager,
             ocrJobDispatcher = mock<OcrJobDispatcher>(),
-            ocrJobNotifier = OcrJobNotifier(notifier),
+            ocrJobNotifier = OcrJobNotifier(notifier, ocrJobRepository),
             uploadDirStr = uploadDir.toString()
         )
     }

@@ -16,14 +16,23 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 
+/**
+ * 작업별 SSE 연결을 관리한다. 진행 이벤트는 [ProgressEventBus]로 모든 서버 인스턴스에 보내고,
+ * 각 인스턴스는 받은 이벤트를 자기에게 연결된 SSE에만 전달한다. SSE 연결은 인스턴스 메모리에 있지만,
+ * 나중에 연결한 클라이언트에게 보낼 현재 단계는 작업 저장소의 상태에서 정한다.
+ */
 @Component
 class OcrProgressManager(
-    private val ocrJobRepository: OcrJobRepository
+    private val ocrJobRepository: OcrJobRepository,
+    private val progressEventBus: ProgressEventBus
 ) {
     private val log = LoggerFactory.getLogger(OcrProgressManager::class.java)
 
     private val emittersMap = ConcurrentHashMap<String, MutableList<SseEmitter>>()
-    private val progressCache = ConcurrentHashMap<String, OcrProgressResponse>()
+
+    init {
+        progressEventBus.subscribe { event -> deliver(event.jobId, event.progress) }
+    }
 
     private val keepAliveScheduler: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { runnable ->
         Thread(runnable, "sse-keep-alive-scheduler").apply { isDaemon = true }
@@ -116,14 +125,15 @@ class OcrProgressManager(
             return emitter
         }
 
-        val cached = progressCache[jobId]
-        if (cached != null) {
+        // 진행 중인 작업이면 지금 단계를 바로 한 번 보낸다. n8n으로 보내는 중(PROCESSING)부터 분석 중으로 본다.
+        val current = when (job?.status) {
+            JobStatus.ACCEPTED -> PipelineStep.ACCEPTED
+            JobStatus.PROCESSING -> PipelineStep.ANALYZING
+            else -> null
+        }
+        if (current != null) {
             try {
-                sendToEmitter(emitter, cached)
-                if (cached.isFinished) {
-                    emitter.completeSafely()
-                    removeEmitter(jobId, emitter)
-                }
+                sendToEmitter(emitter, progressOf(current))
             } catch (_: Exception) {
                 emitter.completeSafely()
                 removeEmitter(jobId, emitter)
@@ -134,25 +144,14 @@ class OcrProgressManager(
     }
 
     fun publishProgress(jobId: String, step: PipelineStep, message: String? = null, progress: Int? = null) {
-        val finalMessage = message ?: step.defaultMessage
-        val finalProgress = progress ?: step.defaultProgress
-        val isFinished = step.isFinished
+        val payload = progressOf(step, message, progress)
+        log.info("Job [$jobId] Progress: step=$step, progress=${payload.progress}%, message='${payload.message}'")
+        progressEventBus.publish(ProgressEvent(jobId, payload))
+    }
 
-        val payload = OcrProgressResponse(
-            step = step,
-            message = finalMessage,
-            progress = finalProgress,
-            isFinished = isFinished
-        )
-
-        if (isFinished) {
-            progressCache.remove(jobId)
-        } else {
-            progressCache[jobId] = payload
-        }
-
-        log.info("Job [$jobId] Progress: step=$step, progress=$finalProgress%, message='$finalMessage'")
-
+    /** 이 인스턴스에 연결된 SSE에만 보낸다. [ProgressEventBus]가 이벤트를 받을 때 부른다. */
+    private fun deliver(jobId: String, payload: OcrProgressResponse) {
+        val isFinished = payload.isFinished
         val emitters = emittersMap[jobId] ?: return
         val failedEmitters = mutableListOf<SseEmitter>()
 
@@ -204,6 +203,13 @@ class OcrProgressManager(
             }
         }
     }
+
+    private fun progressOf(step: PipelineStep, message: String? = null, progress: Int? = null) = OcrProgressResponse(
+        step = step,
+        message = message ?: step.defaultMessage,
+        progress = progress ?: step.defaultProgress,
+        isFinished = step.isFinished
+    )
 
     private fun sendToEmitter(emitter: SseEmitter, payload: OcrProgressResponse) {
         emitter.send(
