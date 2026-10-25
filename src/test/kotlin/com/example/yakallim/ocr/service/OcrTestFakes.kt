@@ -23,6 +23,8 @@ internal class FakeOcrJobRepository : OcrJobRepository {
     override fun isCancelled(jobId: String): Boolean = false
     override fun findJobIdsInStatusUpdatedBefore(statuses: Set<JobStatus>, cutoff: Instant): List<String> = emptyList()
     override fun deleteJob(jobId: String) {}
+    override fun saveFcmToken(jobId: String, token: String) {}
+    override fun takeFcmToken(jobId: String): String? = null
 }
 
 internal class NoOpPushNotificationClient : PushNotificationClient {

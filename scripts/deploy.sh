@@ -8,11 +8,19 @@ IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-yak-allim-backend}"
 IMAGE_NAME="${IMAGE_NAME:-${IMAGE_REPOSITORY}:latest}"
 IMAGE_RETENTION_COUNT="${IMAGE_RETENTION_COUNT:-5}"
 N8N_WEBHOOK_URL="${N8N_WEBHOOK_URL:-http://yak-allim-n8n:5678/webhook/ocr}"
+# 작업 상태 저장소(yak-allim-infra의 Redis). 블루·그린 컨테이너가 함께 쓴다.
+REDIS_CONTAINER_NAME="${REDIS_CONTAINER_NAME:-yak-allim-redis}"
 # 전환 직후 곧바로 종료하지 않고, 처리 중이던 요청이 끝날 시간을 준 뒤 graceful stop 함.
 OLD_CONTAINER_DRAIN_WAIT_SECONDS="${OLD_CONTAINER_DRAIN_WAIT_SECONDS:-30}"
 OLD_CONTAINER_STOP_TIMEOUT_SECONDS="${OLD_CONTAINER_STOP_TIMEOUT_SECONDS:-70}"
 # Dockerfile의 app 사용자 UID
 APP_UID="${APP_UID:-10001}"
+
+# 0. 작업 상태 저장소 확인. Redis 없이 띄우면 헬스체크가 실패하므로, 빌드 전에 원인을 알려 주고 멈춘다.
+if [ -z "$(docker ps --filter "name=^/${REDIS_CONTAINER_NAME}$" --filter "status=running" -q 2>/dev/null || true)" ]; then
+    echo "오류: ${REDIS_CONTAINER_NAME} 컨테이너가 실행 중이 아닙니다. yak-allim-infra에서 'docker compose up -d redis'를 먼저 실행하세요." >&2
+    exit 1
+fi
 
 # 1. 배포 디렉터리 생성 및 키 준비
 mkdir -p "${DEPLOY_DIR}"
@@ -71,7 +79,10 @@ docker create \
     "${IMAGE_NAME}" \
     --server.port=8081 \
     --notification.firebase.key-path="file:/app/yak-allim-firebase-key.json" \
-    --ocr.n8n.webhook-url="${N8N_WEBHOOK_URL}"
+    --ocr.n8n.webhook-url="${N8N_WEBHOOK_URL}" \
+    --ocr.job-store=redis \
+    --spring.data.redis.host="${REDIS_CONTAINER_NAME}" \
+    --management.health.redis.enabled=true
 
 # 앱은 비root 사용자(APP_UID)로 실행되므로, 키 파일 소유자를 맞춰 권한(0400)을 유지한 채 복사한다.
 if [ -f "${DEPLOY_DIR}/yak-allim-firebase-key.json" ]; then
@@ -116,8 +127,8 @@ if [ "$HEALTH_SUCCESS" = "true" ]; then
     docker exec yak-allim-nginx nginx -s reload
 
     # 8. 이전 구버전 컨테이너 드레이닝 후 정지 및 삭제
-    # "무중단"은 신규 요청 기준입니다. 전환 시점에 구버전 컨테이너가 처리 중이던 요청은
-    # 작업 상태가 서버 메모리에만 있어(S2) 드레이닝 중에도 유실될 수 있습니다.
+    # 작업 상태는 Redis에 있어 두 컨테이너가 함께 보므로, 구버전이 받은 작업의 n8n 콜백을 신버전이 받아도 이어진다.
+    # 드레이닝은 구버전에 연결된 SSE와 n8n으로 보내는 중인 요청이 끝날 시간을 주기 위한 것이다.
     OLD_CONTAINER_ID=$(docker ps --filter "name=^/${OLD_CONTAINER_NAME}$" --filter "status=running" -q 2>/dev/null || true)
     if [ -n "$OLD_CONTAINER_ID" ]; then
         if [ -n "$MY_CONTAINER_ID" ] && [ "$OLD_CONTAINER_ID" = "$MY_CONTAINER_ID" ]; then

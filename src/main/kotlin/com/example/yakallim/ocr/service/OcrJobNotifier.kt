@@ -2,29 +2,31 @@ package com.example.yakallim.ocr.service
 
 import com.example.yakallim.notification.service.PushNotificationClient
 import com.example.yakallim.ocr.model.FailureCode
+import com.example.yakallim.ocr.repository.OcrJobRepository
 import org.springframework.stereotype.Component
-import java.util.concurrent.ConcurrentHashMap
 
-/** 작업별 FCM 토큰을 보관하고, 작업이 끝나면 완료·실패 알림을 보낸 뒤 토큰을 정리한다. */
+/**
+ * 작업별 FCM 토큰을 작업 저장소에 붙여 두고, 작업이 끝나면 완료·실패 알림을 보낸 뒤 토큰을 정리한다.
+ * 토큰을 저장소에 두므로, 작업을 받은 서버와 끝낸 서버가 달라도(블루-그린 전환) 알림이 간다.
+ */
 @Component
 class OcrJobNotifier(
-    private val pushNotificationClient: PushNotificationClient
+    private val pushNotificationClient: PushNotificationClient,
+    private val ocrJobRepository: OcrJobRepository
 ) {
-    private val fcmTokens = ConcurrentHashMap<String, String>()
-
     fun register(jobId: String, fcmToken: String?) {
         if (!fcmToken.isNullOrBlank()) {
-            fcmTokens[jobId] = fcmToken
+            ocrJobRepository.saveFcmToken(jobId, fcmToken)
         }
     }
 
     /** 알림 없이 토큰만 정리한다. 취소됐거나 이미 종료된 작업에 쓴다. */
     fun discard(jobId: String) {
-        fcmTokens.remove(jobId)
+        ocrJobRepository.takeFcmToken(jobId)
     }
 
     fun notifyCompleted(jobId: String, message: String) {
-        val token = fcmTokens.remove(jobId) ?: return
+        val token = ocrJobRepository.takeFcmToken(jobId) ?: return
         pushNotificationClient.notify(
             token = token,
             title = COMPLETED_TITLE,
@@ -34,7 +36,7 @@ class OcrJobNotifier(
     }
 
     fun notifyFailed(jobId: String, message: String, failureCode: FailureCode) {
-        val token = fcmTokens.remove(jobId) ?: return
+        val token = ocrJobRepository.takeFcmToken(jobId) ?: return
         pushNotificationClient.notify(
             token = token,
             title = FAILED_TITLE,

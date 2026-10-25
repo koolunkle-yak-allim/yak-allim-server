@@ -25,17 +25,22 @@ class OcrJobCleanupSchedulerTest {
     fun setUp() {
         clock = MutableClock(Instant.parse("2026-01-01T00:00:00Z"))
         ocrJobRepository = InMemoryOcrJobRepository(clock)
-        ocrProgressManager = OcrProgressManager(ocrJobRepository)
+        ocrProgressManager = OcrProgressManager(ocrJobRepository, InMemoryProgressEventBus())
         ocrJobNotifier = mock()
     }
 
-    private fun buildScheduler(retentionMinutes: Long = 60, timeoutMinutes: Long = 15) = OcrJobCleanupScheduler(
+    private fun buildScheduler(
+        retentionMinutes: Long = 60,
+        timeoutMinutes: Long = 15,
+        acceptedTimeoutMinutes: Long = 5
+    ) = OcrJobCleanupScheduler(
         ocrJobRepository = ocrJobRepository,
         ocrProgressManager = ocrProgressManager,
         ocrJobNotifier = ocrJobNotifier,
         clock = clock,
         retentionMinutes = retentionMinutes,
-        processingTimeoutMinutes = timeoutMinutes
+        processingTimeoutMinutes = timeoutMinutes,
+        acceptedTimeoutMinutes = acceptedTimeoutMinutes
     )
 
     @Test
@@ -86,6 +91,29 @@ class OcrJobCleanupSchedulerTest {
         buildScheduler(timeoutMinutes = 15).cleanup()
 
         assertEquals(JobStatus.PROCESSING, ocrJobRepository.getJob("job-1")?.status)
+    }
+
+    @Test
+    @DisplayName("n8n으로 보내지 못한 채 대기 시간을 넘긴 ACCEPTED 작업은 FAILED로 전이된다")
+    fun failsStuckAcceptedJobs() {
+        ocrJobRepository.registerJob("job-1")
+        clock.advanceBy(Duration.ofMinutes(6))
+
+        buildScheduler(acceptedTimeoutMinutes = 5).cleanup()
+
+        assertEquals(JobStatus.FAILED, ocrJobRepository.getJob("job-1")?.status)
+        verify(ocrJobNotifier).notifyFailed("job-1", "처리 시간이 초과되었습니다.", FailureCode.OCR_PROCESSING_TIMEOUT)
+    }
+
+    @Test
+    @DisplayName("대기 시간을 넘기지 않은 ACCEPTED 작업은 그대로 유지된다")
+    fun keepsAcceptedJobsWithinTimeout() {
+        ocrJobRepository.registerJob("job-1")
+        clock.advanceBy(Duration.ofMinutes(4))
+
+        buildScheduler(acceptedTimeoutMinutes = 5).cleanup()
+
+        assertEquals(JobStatus.ACCEPTED, ocrJobRepository.getJob("job-1")?.status)
     }
 
     @Test

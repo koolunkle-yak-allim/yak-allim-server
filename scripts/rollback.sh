@@ -18,6 +18,7 @@ DEPLOY_DIR="${DEPLOY_DIR:-${WORKSPACE}/deploy}"
 IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-yak-allim-backend}"
 IMAGE_NAME="${IMAGE_REPOSITORY}:${ROLLBACK_TAG}"
 N8N_WEBHOOK_URL="${N8N_WEBHOOK_URL:-http://yak-allim-n8n:5678/webhook/ocr}"
+REDIS_CONTAINER_NAME="${REDIS_CONTAINER_NAME:-yak-allim-redis}"
 OLD_CONTAINER_DRAIN_WAIT_SECONDS="${OLD_CONTAINER_DRAIN_WAIT_SECONDS:-30}"
 OLD_CONTAINER_STOP_TIMEOUT_SECONDS="${OLD_CONTAINER_STOP_TIMEOUT_SECONDS:-70}"
 # Dockerfile의 app 사용자 UID
@@ -62,7 +63,10 @@ docker create \
     "${IMAGE_NAME}" \
     --server.port=8081 \
     --notification.firebase.key-path="file:/app/yak-allim-firebase-key.json" \
-    --ocr.n8n.webhook-url="${N8N_WEBHOOK_URL}"
+    --ocr.n8n.webhook-url="${N8N_WEBHOOK_URL}" \
+    --ocr.job-store=redis \
+    --spring.data.redis.host="${REDIS_CONTAINER_NAME}" \
+    --management.health.redis.enabled=true
 
 # 앱은 비root 사용자(APP_UID)로 실행되므로, 키 파일 소유자를 맞춰 권한(0400)을 유지한 채 복사한다.
 if [ -f "${DEPLOY_DIR}/yak-allim-firebase-key.json" ]; then

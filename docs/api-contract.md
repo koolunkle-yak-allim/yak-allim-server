@@ -90,7 +90,8 @@ nginx를 거칠 때 10MB를 넘는 업로드는 nginx가 먼저 막아 HTML `413
 | (comment) `keep-alive` | 15초마다         | SSE 주석(named event 아님, 연결 유지용)                             |
 
 이미 종료된 작업을 구독하면 `connect` 직후 최종 `progress` 이벤트 하나를 보내고 스트림을 닫습니다.
-진행 중인 작업이면 마지막으로 발행된 단계를 먼저 한 번 보내 줍니다.
+진행 중인 작업이면 작업 상태에 맞는 현재 단계를 먼저 한 번 보내 줍니다(`ACCEPTED` 상태면 `ACCEPTED`, `PROCESSING` 상태면 `ANALYZING`).
+블루-그린 전환 중에는 콜백을 받은 서버와 구독 중인 서버가 다를 수 있지만, 진행 이벤트는 모든 서버에 전달되므로 그대로 받습니다.
 
 ### `OcrProgressResponse`
 
@@ -132,7 +133,7 @@ nginx를 거칠 때 10MB를 넘는 업로드는 nginx가 먼저 막아 HTML `413
 |--------------------------|------------------------------------------------------------------|
 | `N8N_DISPATCH_FAILED`    | 서버가 n8n으로 요청을 보내지 못함(연결 실패, n8n이 요청 거부 등)                        |
 | `N8N_PROCESSING_FAILED`  | n8n 워크플로우가 분석에 실패했다고 콜백으로 알림                                     |
-| `OCR_PROCESSING_TIMEOUT` | 처리 시간(`ocr.job-processing-timeout-minutes`, 기본 15분) 안에 콜백이 오지 않음 |
+| `OCR_PROCESSING_TIMEOUT` | 처리 시간(`ocr.job-processing-timeout-minutes`, 기본 15분) 안에 콜백이 오지 않음, 또는 n8n으로 보내기 전 대기 시간(`ocr.job-accepted-timeout-minutes`, 기본 5분)을 넘김 |
 
 > ⚠️ **클라이언트 구현 시 주의**: 서버는 에러 텍스트를 `"message"` 키로 보냅니다. `"error"`라는
 > 키는 보내지 않습니다.
